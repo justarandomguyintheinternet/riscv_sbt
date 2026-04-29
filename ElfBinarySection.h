@@ -18,14 +18,14 @@ public:
     ElfBinarySection(std::string name, uint64_t startAddress, std::vector<uint32_t> data);
 
     std::string getName() const { return name; }
-    uint64_t getStartAddress() const { return startAddress; }
+    uint32_t getStartAddress() const { return startAddress; }
     const std::vector<uint32_t>& getData() const { return data; }
     SectionType getType() const { return type; }
     uint32_t getWord(uint32_t address) const;
 
 private:
     std::string name;
-    uint64_t startAddress;
+    uint32_t startAddress;
     std::vector<uint32_t> data;
     SectionType type;
 };

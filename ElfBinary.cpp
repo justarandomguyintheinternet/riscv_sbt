@@ -69,6 +69,10 @@ void ElfBinary::decode() {
             continue;
         }
 
+        if (!(sectionHeader.sh_flags & SHF_ALLOC)) {
+            continue;
+        }
+
         const Elf_Data* data = elf_getdata(section, nullptr);
         if (!data) {
             continue;
@@ -79,7 +83,12 @@ void ElfBinary::decode() {
         const auto* rawData = static_cast<uint32_t*>(data->d_buf);
         
         for (size_t i = 0; i < count; ++i) {
-            sectionData.push_back(rawData[i]);
+            // .sbss data is null
+            if (rawData == nullptr) {
+                sectionData.push_back(0);
+            } else {
+                sectionData.push_back(rawData[i]);
+            }
         }
 
         sections.emplace_back(std::string(name), sectionHeader.sh_addr, std::move(sectionData));

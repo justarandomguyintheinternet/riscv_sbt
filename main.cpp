@@ -3,38 +3,21 @@
 #include <iomanip>
 #include "ElfBinary.h"
 
-uint32_t instructions[] = {
-    // 0x00500513     ,
-    // 0x00500593     ,
-    // 0x00b50463     ,
-    // 0x00200613     ,
-    // 0x00b51463    ,
-    // 0x00300613    ,
-    // 0xfe010113              ,//  addi    sp,sp,-32
-    // 0x00112e23              ,//  sw      ra,28(sp)
-    // 0x00812c23              ,//  sw      s0,24(sp)
-    // 0x02010413              ,//  addi    s0,sp,32
-    // 0x00100793              ,//  li      a5,1
-    // 0xfef42623              ,//  sw      a5,-20(s0)
-    // 0x000117b7              ,//  lui     a5,0x11
-    // 0x0f47a783              ,//  lw      a5,244(a5) # 110f4 <f>
-    // 0x00578793              ,//  addi    a5,a5,5
-    // 0xfef42423              ,//  sw      a5,-24(s0)
-    // 0x01000793              ,//  li      a5,16
-    // 0x00078513              ,//  mv      a0,a5
-    // 0x01c12083              ,//  lw      ra,28(sp)
-    // 0x01812403              ,//  lw      s0,24(sp)
-    // 0x02010113              ,//  addi    sp,sp,32
-    //0x00008067              ,//  ret
-};
-#define NUM_INSTRUCTIONS (sizeof(instructions) / sizeof(instructions[0]))
-
-uint8_t mem[4096 * 4];
+uint8_t mem[0x80000];
 uint32_t reg[32] = { 0 };
 uint32_t pc = 0;
 
+#define BASE_RA 0xdeadbeef
+
 uint32_t inline instIdx(uint32_t address) {
     return address >> 2;
+}
+
+uint32_t inline readWord(uint32_t address) {
+    return static_cast<uint32_t>(mem[address])
+        | (static_cast<uint32_t>(mem[address + 1]) << 8)
+        | (static_cast<uint32_t>(mem[address + 2]) << 16)
+        | (static_cast<uint32_t>(mem[address + 3]) << 24);
 }
 
 // Extract minor opcode, 3 bit
@@ -96,7 +79,7 @@ int32_t J_FMT_imm(uint32_t instruction) {
 }
 
 int32_t U_FMT_imm(uint32_t instruction) {
-    return (static_cast<int32_t>(instruction & 0xFFFFF000));
+    return (static_cast<int32_t>(instruction & 0xFFFFF000)) >> 12;
 }
 
 uint8_t getShift(uint32_t instruction) {
@@ -121,12 +104,38 @@ void printInstruction(uint32_t instruction) {
 }
 
 int main() {
-    reg[2] = 4096; // init sp
+    ElfBinary binary("hello.elf");
+
+    if (binary.load() != ElfBinary::Success) {
+        std::cerr << "Failed to load elf binary" << std::endl;
+        return 1;
+    }
+
+    const ElfBinarySection& text = binary.getSection(ElfBinarySection::Text)->get();
+    const ElfBinarySection& data = binary.getSection(ElfBinarySection::SData)->get();
+
+    for (auto& section : binary.getSections()) {
+        printf("Loading section %s\n", section.getName().c_str());
+        uint32_t addr = section.getStartAddress();
+
+        for (const auto word : section.getData()) {
+            mem[addr] = static_cast<uint8_t>(word & 0xFF);
+            mem[addr + 1] = static_cast<uint8_t>((word >> 8) & 0xFF);
+            mem[addr + 2] = static_cast<uint8_t>((word >> 16) & 0xFF);
+            mem[addr + 3] = static_cast<uint8_t>((word >> 24) & 0xFF);
+            addr += 4;
+        }
+    }
+
+    pc = text.getStartAddress();
+    reg[2] = sizeof(mem); // init sp
+    reg[3] = data.getStartAddress() + 0x800; // init gp https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
+    reg[1] = BASE_RA; // init ra
 
     while (true) {
         reg[0] = 0;
 
-        uint32_t instruction = instructions[instIdx(pc)];
+        uint32_t instruction = readWord(pc);
         uint8_t op = getOpcode(instruction);
         uint8_t funct3 = getFunct3(instruction);
         uint8_t funct7 = getFunct7(instruction);
@@ -260,6 +269,8 @@ int main() {
         }
         // lw
         if (op == 0b0000011 && funct3 == 0x2) {
+            uint32_t imm = I_FMT_imm(instruction);
+            uint32_t val = reg[rs1];
             uint32_t address = reg[rs1] + I_FMT_imm(instruction);
             reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8 | mem[address + 2] << 16 | mem[address + 3] << 24);
             printf("lw\n");
@@ -340,7 +351,8 @@ int main() {
         // jalr
         if (op == 0b1100111 && funct3 == 0x0) {
             reg[rd] = pc + 4;
-            pc += I_FMT_imm(instruction) + reg[rs1] - 4;
+
+            pc = I_FMT_imm(instruction) + reg[rs1] - 4;
             printf("jalr\n");
         }
 
@@ -350,7 +362,7 @@ int main() {
             printf("lui\n");
         }
         // auipc
-        if (op == 0b0110111) {
+        if (op == 0b0010111) {
             pc += U_FMT_imm(instruction) << 12;
             printf("auipc\n");
         }
@@ -386,38 +398,16 @@ int main() {
         }
 
         std::cout << std::dec << std::setfill(' ');
-
         pc += 4;
-        if (instIdx(pc) == NUM_INSTRUCTIONS) {
+
+        if (pc == BASE_RA) {
+            std::cout << "Returned to BASE_RA" << std::endl;
+            return 0;
+        }
+
+        if (pc < 0x0 || pc >= sizeof(mem)) {
+            std::cout << "pc out of bounds" << std::hex << pc << std::endl;
             break;
         }
     }
 }
-//
-// #include "ElfBinary.h"
-// #include <iostream>
-//
-// int main() {
-//     ElfBinary binary("hello.elf");
-//     if (binary.load() == ElfBinary::Success) {
-//         std::cout << "Successfully loaded hello.elf" << std::endl;
-//         const auto& sections = binary.getSections();
-//         std::cout << "Found " << sections.size() << " sections:" << std::endl;
-//         for (const auto& section : sections) {
-//             std::cout << "  Section: " << section.getName()
-//                       << ", Address: 0x" << std::hex << section.getStartAddress()
-//                       << ", Size (in 32-bit words): " << std::dec << section.getData().size() << std::endl;
-//         }
-//
-//         auto textSection = binary.getSection(ElfBinarySection::Text);
-//         if (textSection) {
-//             std::cout << "Text section found at 0x" << std::hex << textSection->get().getStartAddress() << std::endl;
-//         } else {
-//             std::cout << "Text section not found" << std::endl;
-//         }
-//     } else {
-//         std::cerr << "Failed to load hello.elf" << std::endl;
-//     }
-//
-//     return 0;
-// }
