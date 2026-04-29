@@ -1,5 +1,4 @@
 #include "ElfBinary.h"
-#include <gelf.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -51,6 +50,38 @@ ElfBinary::LoadResult ElfBinary::load() {
     return Success;
 }
 
+std::optional<uint32_t> ElfBinary::getSymbolAddress(const char* symbolName) const {
+    Elf_Scn* section = nullptr;
+
+    while ((section = elf_nextscn(elf, section)) != nullptr) {
+        GElf_Shdr sectionHeader;
+
+        if (gelf_getshdr(section, &sectionHeader) != &sectionHeader) {
+            continue;
+        }
+
+        if (sectionHeader.sh_type == SHT_SYMTAB) {
+            Elf_Data* data = elf_getdata(section, nullptr);
+            int count = sectionHeader.sh_size / sectionHeader.sh_entsize;
+
+            for (int i = 0; i < count; i++) {
+                GElf_Sym symbol;
+                gelf_getsym(data, i, &symbol);
+
+                const char* name = elf_strptr(elf, sectionHeader.sh_link, symbol.st_name);
+
+                if (name && std::string(name) == symbolName) {
+                    return symbol.st_value;
+                }
+            }
+
+            return std::nullopt;
+        }
+    }
+
+    return std::nullopt;
+}
+
 void ElfBinary::decode() {
     size_t sectionNameStringTableIndex;
     if (elf_getshdrstrndx(elf, &sectionNameStringTableIndex) != 0) {
@@ -81,7 +112,7 @@ void ElfBinary::decode() {
         std::vector<uint32_t> sectionData;
         const size_t count = data->d_size / sizeof(uint32_t);
         const auto* rawData = static_cast<uint32_t*>(data->d_buf);
-        
+
         for (size_t i = 0; i < count; ++i) {
             // .sbss data is null
             if (rawData == nullptr) {

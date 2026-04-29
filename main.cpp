@@ -103,6 +103,40 @@ void printInstruction(uint32_t instruction) {
     std::cout << "\tS_FMT_imm: " << std::bitset<11>(S_FMT_imm(instruction)) << std::endl;
 }
 
+void printInfo() {
+    bool hasRegOutput = false;
+    for (int i = 0; i < 32; ++i) {
+        if (reg[i] != 0) {
+            if (!hasRegOutput) {
+                std::cout << "\nRegisters:\n";
+                std::cout << "  idx   hex         signed\n";
+                hasRegOutput = true;
+            }
+
+            std::cout << "  x" << std::dec << std::setw(2) << std::setfill('0') << i
+                      << "   0x" << std::hex << std::setw(8) << std::setfill('0') << reg[i]
+                      << "  " << std::dec << static_cast<int32_t>(reg[i]) << '\n';
+        }
+    }
+
+    bool hasMemOutput = false;
+    for (int i = 0; i < 32; ++i) {
+        if (mem[i] != 0) {
+            if (!hasMemOutput) {
+                std::cout << "\nMemory:\n";
+                std::cout << "  addr    hex   signed\n";
+                hasMemOutput = true;
+            }
+
+            std::cout << "  0x" << std::hex << std::setw(4) << std::setfill('0') << i
+                      << "   0x" << std::setw(2) << static_cast<unsigned>(mem[i])
+                      << "   " << std::dec << static_cast<int>(static_cast<int8_t>(mem[i])) << '\n';
+        }
+    }
+
+    std::cout << std::dec << std::setfill(' ');
+}
+
 int main() {
     ElfBinary binary("hello.elf");
 
@@ -110,9 +144,6 @@ int main() {
         std::cerr << "Failed to load elf binary" << std::endl;
         return 1;
     }
-
-    const ElfBinarySection& text = binary.getSection(ElfBinarySection::Text)->get();
-    const ElfBinarySection& data = binary.getSection(ElfBinarySection::SData)->get();
 
     for (auto& section : binary.getSections()) {
         printf("Loading section %s\n", section.getName().c_str());
@@ -127,9 +158,9 @@ int main() {
         }
     }
 
-    pc = text.getStartAddress();
+    pc = binary.getSymbolAddress("main").value_or(0);
     reg[2] = sizeof(mem); // init sp
-    reg[3] = data.getStartAddress() + 0x800; // init gp https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
+    reg[3] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
     reg[1] = BASE_RA; // init ra
 
     while (true) {
@@ -143,7 +174,7 @@ int main() {
         uint8_t rs2 = getRS2(instruction);
         uint8_t rd = getRD(instruction);
 
-        printInstruction(instruction);
+        // printInstruction(instruction);
 
         // addi
         if (op == 0b0010011 && funct3 == 0x0) {
@@ -367,41 +398,11 @@ int main() {
             printf("auipc\n");
         }
 
-        bool hasRegOutput = false;
-        for (int i = 0; i < 32; ++i) {
-            if (reg[i] != 0) {
-                if (!hasRegOutput) {
-                    std::cout << "\nRegisters:\n";
-                    std::cout << "  idx   hex         signed\n";
-                    hasRegOutput = true;
-                }
-
-                std::cout << "  x" << std::dec << std::setw(2) << std::setfill('0') << i
-                          << "   0x" << std::hex << std::setw(8) << std::setfill('0') << reg[i]
-                          << "  " << std::dec << static_cast<int32_t>(reg[i]) << '\n';
-            }
-        }
-
-        bool hasMemOutput = false;
-        for (int i = 0; i < 32; ++i) {
-            if (mem[i] != 0) {
-                if (!hasMemOutput) {
-                    std::cout << "\nMemory:\n";
-                    std::cout << "  addr    hex   signed\n";
-                    hasMemOutput = true;
-                }
-
-                std::cout << "  0x" << std::hex << std::setw(4) << std::setfill('0') << i
-                          << "   0x" << std::setw(2) << static_cast<unsigned>(mem[i])
-                          << "   " << std::dec << static_cast<int>(static_cast<int8_t>(mem[i])) << '\n';
-            }
-        }
-
-        std::cout << std::dec << std::setfill(' ');
         pc += 4;
 
         if (pc == BASE_RA) {
             std::cout << "Returned to BASE_RA" << std::endl;
+            printInfo();
             return 0;
         }
 
