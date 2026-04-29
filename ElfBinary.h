@@ -1,0 +1,35 @@
+#ifndef RISCV_EMU_ELFBINARY_H
+#define RISCV_EMU_ELFBINARY_H
+
+#include <libelf.h>
+#include <vector>
+#include <optional>
+#include "ElfBinarySection.h"
+
+class ElfBinary {
+public:
+    explicit ElfBinary(const char* filename) : elf(nullptr), filename(filename), fd(0) {};
+    ~ElfBinary();
+
+    enum LoadResult {
+        Success,
+        FileNotFound,
+        NotAnElf,
+        LoadError,
+        NotRISCV
+    };
+
+    LoadResult load();
+    const std::vector<ElfBinarySection>& getSections() const { return sections; }
+    std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(ElfBinarySection::SectionType type) const;
+
+private:
+    void decode();
+
+    Elf* elf;
+    const char* filename;
+    int fd;
+    std::vector<ElfBinarySection> sections;
+};
+
+#endif //RISCV_EMU_ELFBINARY_H
