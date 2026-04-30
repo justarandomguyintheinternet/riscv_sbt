@@ -21,9 +21,10 @@ public:
     };
 
     LoadResult load();
+    void loadToMemory(uint8_t* memory) const;
     const std::vector<ElfBinarySection>& getSections() const { return sections; }
     std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(ElfBinarySection::SectionType type) const;
-    std::optional<uint32_t> getSymbolAddress( const char* symbolName) const;
+    std::optional<uint32_t> getSymbolAddress(const char* symbolName) const;
 
 private:
     void decode();

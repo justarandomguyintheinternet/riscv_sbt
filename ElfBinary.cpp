@@ -134,3 +134,18 @@ std::optional<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getSect
     }
     return std::nullopt;
 }
+
+void ElfBinary::loadToMemory(uint8_t* memory) const {
+    for (auto& section : getSections()) {
+        printf("Loading section %s\n", section.getName().c_str());
+        uint32_t addr = section.getStartAddress();
+
+        for (const auto word : section.getData()) {
+            memory[addr] = static_cast<uint8_t>(word & 0xFF);
+            memory[addr + 1] = static_cast<uint8_t>((word >> 8) & 0xFF);
+            memory[addr + 2] = static_cast<uint8_t>((word >> 16) & 0xFF);
+            memory[addr + 3] = static_cast<uint8_t>((word >> 24) & 0xFF);
+            addr += 4;
+        }
+    }
+}

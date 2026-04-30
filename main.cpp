@@ -137,31 +137,25 @@ void printInfo() {
     std::cout << std::dec << std::setfill(' ');
 }
 
-int main() {
-    ElfBinary binary("hello.elf");
+int main(int argc, char** argv) {
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <elf binary>" << std::endl;
+        return 1;
+    }
+
+    ElfBinary binary(argv[1]);
 
     if (binary.load() != ElfBinary::Success) {
         std::cerr << "Failed to load elf binary" << std::endl;
         return 1;
     }
 
-    for (auto& section : binary.getSections()) {
-        printf("Loading section %s\n", section.getName().c_str());
-        uint32_t addr = section.getStartAddress();
-
-        for (const auto word : section.getData()) {
-            mem[addr] = static_cast<uint8_t>(word & 0xFF);
-            mem[addr + 1] = static_cast<uint8_t>((word >> 8) & 0xFF);
-            mem[addr + 2] = static_cast<uint8_t>((word >> 16) & 0xFF);
-            mem[addr + 3] = static_cast<uint8_t>((word >> 24) & 0xFF);
-            addr += 4;
-        }
-    }
+    binary.loadToMemory(mem);
 
     pc = binary.getSymbolAddress("main").value_or(0);
+    reg[1] = BASE_RA; // init ra
     reg[2] = sizeof(mem); // init sp
     reg[3] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
-    reg[1] = BASE_RA; // init ra
 
     while (true) {
         reg[0] = 0;
@@ -300,8 +294,6 @@ int main() {
         }
         // lw
         if (op == 0b0000011 && funct3 == 0x2) {
-            uint32_t imm = I_FMT_imm(instruction);
-            uint32_t val = reg[rs1];
             uint32_t address = reg[rs1] + I_FMT_imm(instruction);
             reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8 | mem[address + 2] << 16 | mem[address + 3] << 24);
             printf("lw\n");
