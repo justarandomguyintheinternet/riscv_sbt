@@ -110,7 +110,7 @@ void ElfBinary::decode() {
         }
 
         std::vector<uint32_t> sectionData;
-        const size_t count = data->d_size / sizeof(uint32_t);
+        const size_t count = (data->d_size + sizeof(uint32_t) - 1) / sizeof(uint32_t);
         const auto* rawData = static_cast<uint32_t*>(data->d_buf);
 
         for (size_t i = 0; i < count; ++i) {

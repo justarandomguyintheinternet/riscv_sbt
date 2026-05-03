@@ -390,6 +390,21 @@ int main(int argc, char** argv) {
             printf("auipc\n");
         }
 
+        // ecall
+        if (op == 0b1110011 && I_FMT_imm(instruction) == 0x0) {
+            switch (reg[17]) {
+                case 64: // write
+                    for (uint32_t i = 0; i < reg[12]; ++i) {
+                        std::cout << mem[reg[11] + i];
+                    }
+                    std::cout << std::flush;
+                    break;
+                default:
+                    std::cout << "Unknown ecall with code " << reg[17] << std::endl;
+            }
+            printf("ecall\n");
+        }
+
         pc += 4;
 
         if (pc == BASE_RA) {
