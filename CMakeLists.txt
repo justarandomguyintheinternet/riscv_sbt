@@ -1,13 +1,9 @@
 cmake_minimum_required(VERSION 3.31)
-set(CMAKE_CXX_COMPILER_LINKER_TYPE SYSTEM)
-
-project(riscv_emu)
-
 set(CMAKE_CXX_STANDARD 23)
 
-add_executable(riscv_emu main.cpp
-        ElfBinary.cpp
-        ElfBinary.h
-        ElfBinarySection.cpp)
+project(riscv_tools)
 
-target_link_libraries(riscv_emu elf)
+add_subdirectory(lib)
+add_subdirectory(emulator)
+add_subdirectory(sbt)
+add_subdirectory(test)

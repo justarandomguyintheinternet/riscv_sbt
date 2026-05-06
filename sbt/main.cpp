@@ -1,7 +1,7 @@
 #include <iostream>
 #include <bitset>
 #include <iomanip>
-#include "ElfBinary.h"
+#include "../lib/elf/ElfBinary.h"
 
 uint8_t mem[0x80000];
 uint32_t reg[32] = { 0 };
@@ -18,89 +18,6 @@ uint32_t inline readWord(uint32_t address) {
         | (static_cast<uint32_t>(mem[address + 1]) << 8)
         | (static_cast<uint32_t>(mem[address + 2]) << 16)
         | (static_cast<uint32_t>(mem[address + 3]) << 24);
-}
-
-// Extract minor opcode, 3 bit
-uint8_t getFunct3(uint32_t instruction) {
-    return (instruction >> 12) & 0x7;
-}
-
-// Extra distinction for R formated instructions, 7 bit
-uint8_t getFunct7(uint32_t instruction) {
-    return (instruction >> 25) & 0x7f;
-}
-
-// 7 bit
-uint8_t getOpcode(uint32_t instruction) {
-    return instruction & 0x7f;
-}
-
-// 5 bit register adresses
-uint8_t getRS1(uint32_t instruction) {
-    return (instruction >> 15) & 0x1f;
-}
-uint8_t getRS2(uint32_t instruction) {
-    return (instruction >> 20) & 0x1f;
-}
-uint8_t getRD(uint32_t instruction) {
-    return (instruction >> 7) & 0x1f;
-}
-
-int32_t I_FMT_imm(uint32_t instruction) {
-    return static_cast<int32_t>(instruction & 0xFFF00000) >> 20;
-}
-
-int32_t S_FMT_imm(uint32_t instruction) {
-    uint32_t imm = ((instruction >> 7) & 0x1f) | (((instruction >> 25) & 0x7f) << 5);
-    if (imm & 0x800) {
-        imm |= 0xfffff000;
-    }
-    return static_cast<int32_t>(imm);
-}
-
-int32_t B_FMT_imm(uint32_t instruction) {
-    uint32_t imm =
-        ((instruction >> 31) & 0x1) << 12 |
-        ((instruction >> 7) & 0x1) << 11 |
-        ((instruction >> 25) & 0x3F) << 5 |
-        ((instruction >> 8) & 0xF) << 1;
-
-    return (static_cast<int32_t>(imm) << 19) >> 19;
-}
-
-int32_t J_FMT_imm(uint32_t instruction) {
-    uint32_t imm =
-        ((instruction >> 31) & 0x1)  << 20 |
-        ((instruction >> 12) & 0xFF) << 12 |
-        ((instruction >> 20) & 0x1)  << 11 |
-        ((instruction >> 21) & 0x3FF) << 1;
-
-    return (static_cast<int32_t>(imm) << 11) >> 11;
-}
-
-int32_t U_FMT_imm(uint32_t instruction) {
-    return (static_cast<int32_t>(instruction & 0xFFFFF000)) >> 12;
-}
-
-uint8_t getShift(uint32_t instruction) {
-    return (instruction >> 20) & 0x1f;
-}
-
-uint8_t getSHType(uint32_t instruction) {
-    return (instruction >> 25) & 0x7f;
-}
-
-void printInstruction(uint32_t instruction) {
-    std::cout << "Instruction: " << std::hex << instruction << std::endl;
-    std::cout << "\tRaw: " << std::bitset<32>(instruction) << std::endl;
-    std::cout << "\tOpcode: " << std::bitset<7>(getOpcode(instruction)) << std::endl;
-    std::cout << "\tfunct3: " << std::bitset<3>(getFunct3(instruction)) << std::endl;
-    std::cout << "\tfunc7: " << std::bitset<7>(getFunct7(instruction)) << std::endl;
-    std::cout << "\trs1: " << std::bitset<5>(getRS1(instruction)) << std::endl;
-    std::cout << "\trs2: " << std::bitset<5>(getRS2(instruction)) << std::endl;
-    std::cout << "\trd: " << std::bitset<5>(getRD(instruction)) << std::endl;
-    std::cout << "\tI_FMT_imm: " << std::bitset<11>(I_FMT_imm(instruction)) << std::endl;
-    std::cout << "\tS_FMT_imm: " << std::bitset<11>(S_FMT_imm(instruction)) << std::endl;
 }
 
 void printInfo() {
@@ -168,7 +85,22 @@ int main(int argc, char** argv) {
         uint8_t rs2 = getRS2(instruction);
         uint8_t rd = getRD(instruction);
 
-        // printInstruction(instruction);
+        // Instruction:
+            // InstructionSpec
+            // OPCode, funct3, shType, funct7, I_IMM
+        // Code for returning text / code form for identifying instruction (e.g. if(op == ... && funct3 == ...))
+        // Execution:
+            // Takes execution context and runs the instruction, emulator, maybe make this static so its cheaper for the fallback emulator (and have memeber variant that runs the static one and passes the params)
+        // Translate:
+            // Takes instruction and translates to equivalent C code
+        // Base class has deleted constructor, and instead Create method that takes instruction and creates the correct one based on spec (Maybe some static registry?)
+
+        // Translator:
+            // Take loaded binary
+            // Decode to list of instructions
+            // Detect basic blocks, statically determine instructions that are jumped to
+            // Iterate basic blocks, create translated section
+            // do rest
 
         // addi
         if (op == 0b0010011 && funct3 == 0x0) {

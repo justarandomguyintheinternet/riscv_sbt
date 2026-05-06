@@ -5,6 +5,7 @@
 #include <vector>
 #include <optional>
 #include "ElfBinarySection.h"
+#include "../decoding/Decoder.h"
 #include <gelf.h>
 
 class ElfBinary {
@@ -22,6 +23,7 @@ public:
 
     LoadResult load();
     void loadToMemory(uint8_t* memory) const;
+    void decodeToMemory(Instruction* memory) const;
     const std::vector<ElfBinarySection>& getSections() const { return sections; }
     std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(ElfBinarySection::SectionType type) const;
     std::optional<uint32_t> getSymbolAddress(const char* symbolName) const;
