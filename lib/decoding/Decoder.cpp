@@ -67,7 +67,7 @@ namespace Decoder {
         return getFunct7(instruction);
     }
 
-    Instruction decode(uint32_t data) {
+    Instruction decode(uint32_t data, uint32_t address) {
         for (auto& spec : specs) {
             if (getOpcode(data) == spec.opcode &&
                 (spec.useFunct3 ? getFunct3(data) == spec.funct3 : true) &&
@@ -81,6 +81,7 @@ namespace Decoder {
                 instr.rs1 = getRS1(data);
                 instr.rs2 = getRS2(data);
                 instr.rd = getRD(data);
+                instr.address = address;
 
                 switch (spec.format) {
                     case EInstructionFMT::R:

@@ -7,7 +7,8 @@
 struct Instruction {
     EInstruction type;
     uint32_t instruction;
-    uint32_t immediate;
+    int32_t immediate;
+    uint32_t address;
     uint8_t rs1;
     uint8_t rs2;
     uint8_t rd;
@@ -34,7 +35,7 @@ namespace Decoder {
     uint8_t getShift(uint32_t instruction) ;
     uint8_t getSHType(uint32_t instruction);
 
-    Instruction decode(uint32_t data);
+    Instruction decode(uint32_t data, uint32_t address);
 }
 
 #endif //RISCV_EMU_DECODER_H

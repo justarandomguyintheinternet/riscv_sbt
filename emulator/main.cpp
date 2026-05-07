@@ -82,23 +82,6 @@ int main(int argc, char** argv) {
         uint8_t rs2 = Decoder::getRS2(instruction);
         uint8_t rd = Decoder::getRD(instruction);
 
-        // Instruction:
-            // InstructionSpec
-            // OPCode, funct3, shType, funct7, I_IMM
-        // Code for returning text / code form for identifying instruction (e.g. if(op == ... && funct3 == ...))
-        // Execution:
-            // Takes execution context and runs the instruction, emulator, maybe make this static so its cheaper for the fallback emulator (and have memeber variant that runs the static one and passes the params)
-        // Translate:
-            // Takes instruction and translates to equivalent C code
-        // Base class has deleted constructor, and instead Create method that takes instruction and creates the correct one based on spec (Maybe some static registry?)
-
-        // Translator:
-            // Take loaded binary
-            // Decode to list of instructions
-            // Detect basic blocks, statically determine instructions that are jumped to
-            // Iterate basic blocks, create translated section
-            // do rest
-
         // addi
         if (op == 0b0010011 && funct3 == 0x0) {
             reg[rd] = reg[rs1] + Decoder::I_FMT_imm(instruction);
@@ -224,6 +207,7 @@ int main(int argc, char** argv) {
         // lw
         if (op == 0b0000011 && funct3 == 0x2) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
+            printf("address: 0x%X\n", address);
             reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8 | mem[address + 2] << 16 | mem[address + 3] << 24);
             printf("lw\n");
         }

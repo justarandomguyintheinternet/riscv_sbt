@@ -23,7 +23,26 @@ public:
 
     LoadResult load();
     void loadToMemory(uint8_t* memory) const;
-    void decodeToMemory(Instruction* memory) const;
+
+    template<typename Container>
+    void decodeToContainer(Container& container) const {
+        auto& section = getSection(ElfBinarySection::Text).value().get();
+        printf("Loading section %s\n", section.getName().c_str());
+        uint32_t addr = section.getStartAddress();
+
+        for (const auto word : section.getData()) {
+            Instruction inst = Decoder::decode(word, addr);
+
+            if (inst.type == EInstruction::INVALID) {
+                printf("Invalid instruction at %p\n", reinterpret_cast<void *>(addr));
+            } else {
+                container.push_back(inst);
+            }
+
+            addr += 4;
+        }
+    }
+
     const std::vector<ElfBinarySection>& getSections() const { return sections; }
     std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(ElfBinarySection::SectionType type) const;
     std::optional<uint32_t> getSymbolAddress(const char* symbolName) const;

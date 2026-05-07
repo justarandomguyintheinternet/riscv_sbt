@@ -2,57 +2,230 @@
 #include <bitset>
 #include <iomanip>
 #include "../lib/elf/ElfBinary.h"
+#include <format>
 
-uint8_t mem[0x80000];
-uint32_t reg[32] = { 0 };
-uint32_t pc = 0;
+// load binary
+// decode all instructions into vector of instructions
+// write out program:
+//    include maybe printf
+//    create memory array
+//    fill memory array with data
+//    init pc, ra, gp
+//    switch over PC
+//    iterate all instructions, create switch case with label being address of instruction
+//    end prologue
+
+std::vector<Instruction> instructions;
+uint8_t indent = 0;
 
 #define BASE_RA 0xdeadbeef
+#define STACK_SIZE 0x80000
+#define MULTILINE(...) #__VA_ARGS__
 
-uint32_t inline instIdx(uint32_t address) {
-    return address >> 2;
-}
-
-uint32_t inline readWord(uint32_t address) {
-    return static_cast<uint32_t>(mem[address])
-        | (static_cast<uint32_t>(mem[address + 1]) << 8)
-        | (static_cast<uint32_t>(mem[address + 2]) << 16)
-        | (static_cast<uint32_t>(mem[address + 3]) << 24);
-}
-
-void printInfo() {
-    bool hasRegOutput = false;
-    for (int i = 0; i < 32; ++i) {
-        if (reg[i] != 0) {
-            if (!hasRegOutput) {
-                std::cout << "\nRegisters:\n";
-                std::cout << "  idx   hex         signed\n";
-                hasRegOutput = true;
-            }
-
-            std::cout << "  x" << std::dec << std::setw(2) << std::setfill('0') << i
-                      << "   0x" << std::hex << std::setw(8) << std::setfill('0') << reg[i]
-                      << "  " << std::dec << static_cast<int32_t>(reg[i]) << '\n';
-        }
+void emit(std::string_view text) {
+    for (size_t i = 0; i < indent; ++i) {
+        std::cout << "\t";
     }
-
-    bool hasMemOutput = false;
-    for (int i = 0; i < 32; ++i) {
-        if (mem[i] != 0) {
-            if (!hasMemOutput) {
-                std::cout << "\nMemory:\n";
-                std::cout << "  addr    hex   signed\n";
-                hasMemOutput = true;
-            }
-
-            std::cout << "  0x" << std::hex << std::setw(4) << std::setfill('0') << i
-                      << "   0x" << std::setw(2) << static_cast<unsigned>(mem[i])
-                      << "   " << std::dec << static_cast<int>(static_cast<int8_t>(mem[i])) << '\n';
-        }
-    }
-
-    std::cout << std::dec << std::setfill(' ');
+    std::cout << text;
 }
+
+// Useful for e.g. omitting instructions that write to x0
+void emit(std::string_view text, uint8_t condition) {
+    if (condition > 0) {
+        emit(text);
+    }
+}
+
+void emitInfoPrint() {
+    emit(MULTILINE(
+    void printInfo() {
+        bool hasRegOutput = false;
+        for (int i = 0; i < 32; ++i) {
+            if (reg[i] != 0) {
+                if (!hasRegOutput) {
+                    std::cout << "\nRegisters:\n";
+                    std::cout << "  idx   hex         signed\n";
+                    hasRegOutput = true;
+                }
+
+                std::cout << "  x" << std::dec << std::setw(2) << std::setfill('0') << i
+                          << "   0x" << std::hex << std::setw(8) << std::setfill('0') << reg[i]
+                          << "  " << std::dec << static_cast<int32_t>(reg[i]) << '\n';
+            }
+        }
+
+        std::cout << std::dec << std::setfill(' ');
+    }
+    ));
+}
+
+void emitLoadSaveAddress(const Instruction& instruction) {
+    emit(std::format("address = reg[{}] + {};\n", instruction.rs1, instruction.immediate));
+}
+
+void emitInstruction(const Instruction& instruction) {
+    indent = 2;
+    emit(std::format("L{:X}:\n", instruction.address));
+    indent = 3;
+
+    switch (instruction.type) {
+        case EInstruction::ADD:
+            emit(std::format("reg[{}] = reg[{}] + reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::SUB:
+            emit(std::format("reg[{}] = reg[{}] - reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::XOR:
+            emit(std::format("reg[{}] = reg[{}] ^ reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::OR:
+            emit(std::format("reg[{}] = reg[{}] | reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::AND:
+            emit(std::format("reg[{}] = reg[{}] & reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::SLL:
+            emit(std::format("reg[{}] = reg[{}] << (reg[{}] & 0x1f);\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::SRL:
+            emit(std::format("reg[{}] = reg[{}] >> (reg[{}] & 0x1f);\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::SRA:
+            emit(std::format("reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(reg[{}]) >> reg[{}] & 0x1f);\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::SLT:
+            emit(std::format("reg[{}] = static_cast<int32_t>(reg[{}]) < static_cast<int32_t>(reg[{}]);\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::SLTU:
+            emit(std::format("reg[{}] = reg[{}] < reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::ADDI:
+            emit(std::format("reg[{}] = reg[{}] + {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            break;
+        case EInstruction::XORI:
+            emit(std::format("reg[{}] = reg[{}] ^ {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            break;
+        case EInstruction::ORI:
+            emit(std::format("reg[{}] = reg[{}] | {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            break;
+        case EInstruction::ANDI:
+            emit(std::format("reg[{}] = reg[{}] & {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            break;
+        case EInstruction::SLLI:
+            emit(std::format("reg[{}] = reg[{}] << {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            break;
+        case EInstruction::SRLI:
+            emit(std::format("reg[{}] = reg[{}] >> {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            break;
+        case EInstruction::SRAI:
+            emit(std::format("reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(reg[{}]) >> {});\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd); // rs2 is same as shift amount
+            break;
+        case EInstruction::SLTI:
+            emit(std::format("reg[{}] = static_cast<int32_t>(reg[{}]) < {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            break;
+        case EInstruction::SLTIU:
+            emit(std::format("reg[{}] = reg[{}] < {};\n", instruction.rd, instruction.rs1, static_cast<uint32_t>(instruction.immediate)), instruction.rd);
+            break;
+        case EInstruction::LB:
+            emitLoadSaveAddress(instruction);
+            emit(std::format("reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(mem[address])));\n", instruction.rd), instruction.rd);
+            break;
+        case EInstruction::LH: {
+            emitLoadSaveAddress(instruction);
+            emit(std::format("reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(mem[address] | mem[address + 1] << 8)));\n", instruction.rd), instruction.rd);
+            break;
+        }
+        case EInstruction::LW: {
+            emitLoadSaveAddress(instruction);
+            emit(std::format("reg[{}] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8 | mem[address + 2] << 16 | mem[address + 3] << 24);\n", instruction.rd), instruction.rd);
+            break;
+        }
+        case EInstruction::LBU: {
+            emitLoadSaveAddress(instruction);
+            emit(std::format("reg[{}] = static_cast<uint32_t>(mem[address]);\n", instruction.rd), instruction.rd);
+            break;
+        }
+        case EInstruction::LHU: {
+            emitLoadSaveAddress(instruction);
+            emit(std::format("reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8);\n", instruction.rd), instruction.rd);
+            break;
+        }
+        case EInstruction::SB: {
+            emitLoadSaveAddress(instruction);
+            emit(std::format("mem[address] = static_cast<uint8_t>(reg[{}] & 0xFF);\n", instruction.rs2));
+            break;
+        }
+        case EInstruction::SH: {
+            emitLoadSaveAddress(instruction);
+            emit(std::format("mem[address] = static_cast<uint8_t>(reg[{}] & 0xFF);\n", instruction.rs2));
+            emit(std::format("mem[address + 1] = static_cast<uint8_t>((reg[{}] >> 8) & 0xFF);\n", instruction.rs2));
+            break;
+        }
+        case EInstruction::SW: {
+            emitLoadSaveAddress(instruction);
+            emit(std::format("mem[address] = static_cast<uint8_t>(reg[{}] & 0xFF);\n", instruction.rs2));
+            emit(std::format("mem[address + 1] = static_cast<uint8_t>((reg[{}] >> 8) & 0xFF);\n", instruction.rs2));
+            emit(std::format("mem[address + 2] = static_cast<uint8_t>((reg[{}] >> 16) & 0xFF);\n", instruction.rs2));
+            emit(std::format("mem[address + 3] = static_cast<uint8_t>((reg[{}] >> 24) & 0xFF);\n", instruction.rs2));
+            break;
+        }
+        case EInstruction::BEQ:
+            emit(std::format("if (reg[{}] == reg[{}]) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            break;
+        case EInstruction::BNE:
+            emit(std::format("if (reg[{}] != reg[{}]) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            break;
+        case EInstruction::BLT:
+            emit(std::format("if (static_cast<int32_t>(reg[{}]) < static_cast<int32_t>(reg[{}])) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            break;
+        case EInstruction::BGE:
+            emit(std::format("if (static_cast<int32_t>(reg[{}]) >= static_cast<int32_t>(reg[{}])) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            break;
+        case EInstruction::BLTU:
+            emit(std::format("if (reg[{}] < reg[{}]) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            break;
+        case EInstruction::BGEU:
+            emit(std::format("if (reg[{}] >= reg[{}]) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            break;
+        case EInstruction::JAL:
+            emit(std::format("reg[{}] = 0x{:X};\n", instruction.rd, instruction.address + 4), instruction.rd);
+            emit(std::format("goto L{:X};\n", instruction.address + instruction.immediate));
+            break;
+        case EInstruction::JALR:
+            emit(std::format("reg[{}] = 0x{:X};\n", instruction.rd, instruction.address + 4), instruction.rd);
+            emit(std::format("pc = {} + reg[{}];\n", instruction.immediate, instruction.rs1));
+            emit("continue;\n");
+            break;
+        case EInstruction::LUI:
+            emit(std::format("reg[{}] = {} << 12;\n", instruction.rd, instruction.immediate), instruction.rd);
+            break;
+        case EInstruction::AUIPC:
+            emit(std::format("goto L{:X};\n", instruction.address + (instruction.immediate << 12)));
+            break;
+        case EInstruction::ECALL:
+            emit(MULTILINE(switch (reg[17]) {
+                case 64: // write
+                    for (uint32_t i = 0; i < reg[12]; ++i) {
+                        std::cout << (char)mem[reg[11] + i];
+                    }
+                    std::cout << std::flush;
+                    break;
+                default:
+                    std::cout << "Unknown ecall with code " << reg[17] << std::endl;
+            }));
+            break;
+        case EInstruction::EBREAK:
+            break;
+        case EInstruction::FENCE:
+            break;
+        case EInstruction::INVALID:
+            emit(std::format("// Invalid instruction at 0x{:X}\n", instruction.address));
+            break;
+    }
+}
+
+// todo: make reg[0] read just const 0
+// todo: fill remaining values of dispatch table with handler for invalid instructions
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -67,287 +240,57 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    binary.loadToMemory(mem);
+    binary.decodeToContainer(instructions);
+    auto& text = binary.getSection(ElfBinarySection::Text).value().get();
 
-    pc = binary.getSymbolAddress("main").value_or(0);
-    reg[1] = BASE_RA; // init ra
-    reg[2] = sizeof(mem); // init sp
-    reg[3] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
+    emit("#include <iostream>\n");
+    emit("#include <cstdint>\n");
+    emit("#include <iomanip>\n\n");
 
-    while (true) {
-        reg[0] = 0;
+    emit(std::format("uint32_t mem[0x{:X}];\n", STACK_SIZE));
+    emit("uint32_t reg[32];\n");
+    emit(std::format("uint32_t pc = 0x{:X};\n\n", binary.getSymbolAddress("main").value_or(0)));
+    emit(std::format("void* dispatch[{}] = {{0}};\n", text.getSize()));
 
-        uint32_t instruction = readWord(pc);
-        uint8_t op = getOpcode(instruction);
-        uint8_t funct3 = getFunct3(instruction);
-        uint8_t funct7 = getFunct7(instruction);
-        uint8_t rs1 = getRS1(instruction);
-        uint8_t rs2 = getRS2(instruction);
-        uint8_t rd = getRD(instruction);
+    emitInfoPrint();
 
-        // Instruction:
-            // InstructionSpec
-            // OPCode, funct3, shType, funct7, I_IMM
-        // Code for returning text / code form for identifying instruction (e.g. if(op == ... && funct3 == ...))
-        // Execution:
-            // Takes execution context and runs the instruction, emulator, maybe make this static so its cheaper for the fallback emulator (and have memeber variant that runs the static one and passes the params)
-        // Translate:
-            // Takes instruction and translates to equivalent C code
-        // Base class has deleted constructor, and instead Create method that takes instruction and creates the correct one based on spec (Maybe some static registry?)
+    emit("\n\nint main() {\n");
+    emit(std::format("\treg[1] = 0x{:X};\n", BASE_RA));
+    emit(std::format("\treg[2] = 0x{:X};\n", STACK_SIZE));
+    emit(std::format("\treg[3] = 0x{:X};\n\n", binary.getSymbolAddress("__global_pointer$").value_or(0)));
 
-        // Translator:
-            // Take loaded binary
-            // Decode to list of instructions
-            // Detect basic blocks, statically determine instructions that are jumped to
-            // Iterate basic blocks, create translated section
-            // do rest
-
-        // addi
-        if (op == 0b0010011 && funct3 == 0x0) {
-            reg[rd] = reg[rs1] + I_FMT_imm(instruction);
-            printf("addi\n");
-        }
-        // xori
-        if (op == 0b0010011 && funct3 == 0x4) {
-            reg[rd] = reg[rs1] ^ I_FMT_imm(instruction);
-            printf("xori\n");
-        }
-        // ori
-        if (op == 0b0010011 && funct3 == 0x6) {
-            reg[rd] = reg[rs1] | I_FMT_imm(instruction);
-            printf("ori\n");
-        }
-        // andi
-        if (op == 0b0010011 && funct3 == 0x7) {
-            reg[rd] = reg[rs1] & I_FMT_imm(instruction);
-            printf("andi\n");
-        }
-        // slli
-        if (op == 0b0010011 && funct3 == 0x1 && getSHType(instruction) == 0x00) {
-            reg[rd] = reg[rs1] << getShift(instruction);
-            printf("slli\n");
-        }
-        // srli
-        if (op == 0b0010011 && funct3 == 0x5 && getSHType(instruction) == 0x00) {
-            reg[rd] = reg[rs1] >> getShift(instruction);
-            printf("srli\n");
-        }
-        // srai
-        if (op == 0b0010011 && funct3 == 0x5 && getSHType(instruction) == 0x20) {
-            uint8_t shift = getShift(instruction);
-            reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) >> shift);
-            printf("srai\n");
-        }
-        // slti
-        if (op == 0b0010011 && funct3 == 0x2) {
-            reg[rd] = static_cast<int32_t>(reg[rs1]) < I_FMT_imm(instruction);
-            printf("slti\n");
-        }
-        // sltiu
-        if (op == 0b0010011 && funct3 == 0x3) {
-            reg[rd] = reg[rs1] < static_cast<uint32_t>(I_FMT_imm(instruction));
-            printf("sltiu\n");
-        }
-
-        // add
-        if (op == 0b0110011 && funct3 == 0x0 && funct7 == 0x00) {
-            reg[rd] = reg[rs1] + reg[rs2];
-            printf("add\n");
-        }
-        // sub
-        if (op == 0b0110011 && funct3 == 0x0 && funct7 == 0x20) {
-            reg[rd] = reg[rs1] - reg[rs2];
-            printf("sub\n");
-        }
-        // xor
-        if (op == 0b0110011 && funct3 == 0x4) {
-            reg[rd] = reg[rs1] ^ reg[rs2];
-            printf("xor\n");
-        }
-        // or
-        if (op == 0b0110011 && funct3 == 0x6) {
-            reg[rd] = reg[rs1] | reg[rs2];
-            printf("or\n");
-        }
-        // and
-        if (op == 0b0110011 && funct3 == 0x7) {
-            reg[rd] = reg[rs1] & reg[rs2];
-            printf("and\n");
-        }
-        // sll
-        if (op == 0b0110011 && funct3 == 0x1) {
-            reg[rd] = reg[rs1] << (reg[rs2] & 0x1f);
-            printf("sll\n");
-        }
-        // srl
-        if (op == 0b0110011 && funct3 == 0x5 && funct7 == 0x00) {
-            reg[rd] = reg[rs1] >> (reg[rs2] & 0x1f);
-            printf("srl\n");
-        }
-        // sra
-        if (op == 0b0110011 && funct3 == 0x5 && funct7 == 0x20) {
-            uint8_t shift = static_cast<uint8_t>(reg[rs2] & 0x1f);
-            reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) >> shift);
-            printf("sra\n");
-        }
-        // slt
-        if (op == 0b0110011 && funct3 == 0x2) {
-            reg[rd] = static_cast<int32_t>(reg[rs1]) < static_cast<int32_t>(reg[rs2]);
-            printf("slt\n");
-        }
-        // sltu
-        if (op == 0b0110011 && funct3 == 0x3) {
-            reg[rd] = reg[rs1] < reg[rs2];
-            printf("sltu\n");
-        }
-        // lb
-        if (op == 0b0000011 && funct3 == 0x0) {
-            uint32_t address = reg[rs1] + I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(mem[address])));
-            printf("lb\n");
-        }
-        // lbu
-        if (op == 0b0000011 && funct3 == 0x4) {
-            uint32_t address = reg[rs1] + I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(mem[address]);
-            printf("lbu\n");
-        }
-        // lh
-        if (op == 0b0000011 && funct3 == 0x1) {
-            uint32_t address = reg[rs1] + I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(mem[address] | mem[address + 1] << 8)));
-            printf("lh\n");
-        }
-        // lhu
-        if (op == 0b0000011 && funct3 == 0x5) {
-            uint32_t address = reg[rs1] + I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8);
-            printf("lhu\n");
-        }
-        // lw
-        if (op == 0b0000011 && funct3 == 0x2) {
-            uint32_t address = reg[rs1] + I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8 | mem[address + 2] << 16 | mem[address + 3] << 24);
-            printf("lw\n");
-        }
-
-        // sb
-        if (op == 0b0100011 && funct3 == 0x0) {
-            uint32_t address = reg[rs1] + S_FMT_imm(instruction);
-            mem[address] = static_cast<uint8_t>(reg[rs2] & 0xFF);
-            printf("sb\n");
-        }
-        // sh
-        if (op == 0b0100011 && funct3 == 0x1) {
-            uint32_t address = reg[rs1] + S_FMT_imm(instruction);
-            mem[address] = static_cast<uint8_t>(reg[rs2] & 0xFF);
-            mem[address + 1] = static_cast<uint8_t>((reg[rs2] >> 8) & 0xFF);
-            printf("sh\n");
-        }
-        // sw
-        if (op == 0b0100011 && funct3 == 0x2) {
-            uint32_t address = reg[rs1] + S_FMT_imm(instruction);
-            mem[address] = static_cast<uint8_t>(reg[rs2] & 0xFF);
-            mem[address + 1] = static_cast<uint8_t>((reg[rs2] >> 8) & 0xFF);
-            mem[address + 2] = static_cast<uint8_t>((reg[rs2] >> 16) & 0xFF);
-            mem[address + 3] = static_cast<uint8_t>((reg[rs2] >> 24) & 0xFF);
-            printf("sw\n");
-        }
-
-        // beq
-        if (op == 0b1100011 && funct3 == 0x0) {
-            if (reg[rs1] == reg[rs2]) {
-                pc += B_FMT_imm(instruction) - 4;
-            }
-            printf("beq\n");
-        }
-        // bne
-        if (op == 0b1100011 && funct3 == 0x1) {
-            if (reg[rs1] != reg[rs2]) {
-                pc += B_FMT_imm(instruction) - 4;
-            }
-            printf("bne\n");
-        }
-        // blt
-        if (op == 0b1100011 && funct3 == 0x4) {
-            if (static_cast<int32_t>(reg[rs1]) < static_cast<int32_t>(reg[rs2])) {
-                pc += B_FMT_imm(instruction) - 4;
-            }
-            printf("blt\n");
-        }
-        // bge
-        if (op == 0b1100011 && funct3 == 0x5) {
-            if (static_cast<int32_t>(reg[rs1]) >= static_cast<int32_t>(reg[rs2])) {
-                pc += B_FMT_imm(instruction) - 4;
-            }
-            printf("bge\n");
-        }
-        // bltu
-        if (op == 0b1100011 && funct3 == 0x6) {
-            if (reg[rs1] < reg[rs2]) {
-                pc += B_FMT_imm(instruction) - 4;
-            }
-            printf("bltu\n");
-        }
-        // bgeu
-        if (op == 0b1100011 && funct3 == 0x7) {
-            if (reg[rs1] >= reg[rs2]) {
-                pc += B_FMT_imm(instruction) - 4;
-            }
-            printf("bgeu\n");
-        }
-
-        // jal
-        if (op == 0b1101111) {
-            reg[rd] = pc + 4;
-            pc += J_FMT_imm(instruction) - 4;
-            printf("jal\n");
-        }
-        // jalr
-        if (op == 0b1100111 && funct3 == 0x0) {
-            reg[rd] = pc + 4;
-
-            pc = I_FMT_imm(instruction) + reg[rs1] - 4;
-            printf("jalr\n");
-        }
-
-        // lui
-        if (op == 0b0110111) {
-            reg[rd] = U_FMT_imm(instruction) << 12;
-            printf("lui\n");
-        }
-        // auipc
-        if (op == 0b0010111) {
-            pc += U_FMT_imm(instruction) << 12;
-            printf("auipc\n");
-        }
-
-        // ecall
-        if (op == 0b1110011 && I_FMT_imm(instruction) == 0x0) {
-            switch (reg[17]) {
-                case 64: // write
-                    for (uint32_t i = 0; i < reg[12]; ++i) {
-                        std::cout << mem[reg[11] + i];
-                    }
-                    std::cout << std::flush;
-                    break;
-                default:
-                    std::cout << "Unknown ecall with code " << reg[17] << std::endl;
-            }
-            printf("ecall\n");
-        }
-
-        pc += 4;
-
-        if (pc == BASE_RA) {
-            std::cout << "Returned to BASE_RA" << std::endl;
-            printInfo();
-            return 0;
-        }
-
-        if (pc < 0x0 || pc >= sizeof(mem)) {
-            std::cout << "pc out of bounds" << std::hex << pc << std::endl;
-            break;
-        }
+    // build dispatch table https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
+    for (const auto& inst : instructions) {
+        emit(std::format("\tdispatch[{}] = &&L{:X};\n", (inst.address - text.getStartAddress()) / 4, inst.address));
     }
+
+    // load static data
+    auto& dataSection = binary.getSection(ElfBinarySection::Data).value().get();
+    uint32_t dataAddr = dataSection.getStartAddress();
+
+    for (auto word : dataSection.getData()) {
+        emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr, static_cast<uint8_t>(word & 0xFF)));
+        emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 1, static_cast<uint8_t>((word >> 8) & 0xFF)));
+        emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 2, static_cast<uint8_t>((word >> 16) & 0xFF)));
+        emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 3, static_cast<uint8_t>((word >> 24) & 0xFF)));
+        emit(std::format(" // 0x{:X}\n", word));
+
+        dataAddr += 4;
+    }
+
+    emit("\n\tuint32_t address;\n");
+    emit("\n\twhile (true) {\n");
+    emit(std::format("\t\tuint32_t pcDispatchIndex = (pc - 0x{:X}) / 4;\n", text.getStartAddress()));
+    emit(std::format("\t\tif (pc == 0x{:X}) {{ printInfo(); return 0; }}\n", BASE_RA));
+    emit("\t\tgoto *dispatch[pcDispatchIndex];\n\n");
+
+    for (const auto& inst : instructions) {
+        emitInstruction(inst);
+    }
+
+    indent = 0;
+    emit("\t}\n");
+    emit("}\n");
+
+    return 0;
 }

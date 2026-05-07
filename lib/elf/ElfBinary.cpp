@@ -149,22 +149,3 @@ void ElfBinary::loadToMemory(uint8_t* memory) const {
         }
     }
 }
-
-void ElfBinary::decodeToMemory(Instruction* memory) const {
-    for (auto& section : getSections()) {
-        printf("Loading section %s\n", section.getName().c_str());
-        uint32_t addr = section.getStartAddress();
-
-        for (const auto word : section.getData()) {
-            Instruction inst = Decoder::decode(word);
-
-            if (inst.type == EInstruction::INVALID) {
-                printf("Invalid instruction at %p\n", reinterpret_cast<void *>(addr));
-            } else {
-                memory[addr] = inst;
-            }
-
-            ++addr;
-        }
-    }
-}

@@ -9,7 +9,7 @@ class ElfBinarySection {
 public:
     enum SectionType {
         Text,
-        SData,
+        Data,
         Other
     };
 
@@ -22,6 +22,7 @@ public:
     const std::vector<uint32_t>& getData() const { return data; }
     SectionType getType() const { return type; }
     uint32_t getWord(uint32_t address) const;
+    uint32_t getSize() const { return data.size(); }
 
 private:
     std::string name;
