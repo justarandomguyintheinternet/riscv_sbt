@@ -226,6 +226,7 @@ void emitInstruction(const Instruction& instruction) {
 
 // todo: make reg[0] read just const 0
 // todo: fill remaining values of dispatch table with handler for invalid instructions
+// todo: switch memory to uint32_t since it seems like most operations on it are lw/sw, might save some performance
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -265,17 +266,19 @@ int main(int argc, char** argv) {
     }
 
     // load static data
-    auto& dataSection = binary.getSection(ElfBinarySection::Data).value().get();
-    uint32_t dataAddr = dataSection.getStartAddress();
+    if (binary.getSection(ElfBinarySection::Data).has_value()) {
+        auto& dataSection = binary.getSection(ElfBinarySection::Data).value().get();
+        uint32_t dataAddr = dataSection.getStartAddress();
 
-    for (auto word : dataSection.getData()) {
-        emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr, static_cast<uint8_t>(word & 0xFF)));
-        emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 1, static_cast<uint8_t>((word >> 8) & 0xFF)));
-        emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 2, static_cast<uint8_t>((word >> 16) & 0xFF)));
-        emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 3, static_cast<uint8_t>((word >> 24) & 0xFF)));
-        emit(std::format(" // 0x{:X}\n", word));
+        for (auto word : dataSection.getData()) {
+            emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr, static_cast<uint8_t>(word & 0xFF)));
+            emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 1, static_cast<uint8_t>((word >> 8) & 0xFF)));
+            emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 2, static_cast<uint8_t>((word >> 16) & 0xFF)));
+            emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 3, static_cast<uint8_t>((word >> 24) & 0xFF)));
+            emit(std::format(" // 0x{:X}\n", word));
 
-        dataAddr += 4;
+            dataAddr += 4;
+        }
     }
 
     emit("\n\tuint32_t address;\n");
