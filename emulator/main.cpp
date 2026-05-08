@@ -9,6 +9,13 @@ uint32_t reg[32] = { 0 };
 uint32_t pc = 0;
 
 #define BASE_RA 0xdeadbeef
+#define LOG_INSTRUCTIONS 0
+
+#if LOG_INSTRUCTIONS == 1
+    #define LOG_INST(addr, name) logInstruction(addr, name)
+#else
+    #define LOG_INST(addr, name)
+#endif
 
 uint32_t inline readWord(uint32_t address) {
     return static_cast<uint32_t>(mem[address])
@@ -51,6 +58,10 @@ void printInfo() {
     std::cout << std::dec << std::setfill(' ');
 }
 
+void logInstruction(uint32_t address, const char* name) {
+    printf("0x%08x: %s\n", address, name);
+}
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " <elf binary>" << std::endl;
@@ -85,145 +96,144 @@ int main(int argc, char** argv) {
         // addi
         if (op == 0b0010011 && funct3 == 0x0) {
             reg[rd] = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            printf("addi\n");
+            LOG_INST(pc, "addi");
         }
         // xori
         if (op == 0b0010011 && funct3 == 0x4) {
             reg[rd] = reg[rs1] ^ Decoder::I_FMT_imm(instruction);
-            printf("xori\n");
+            LOG_INST(pc, "xori");
         }
         // ori
         if (op == 0b0010011 && funct3 == 0x6) {
             reg[rd] = reg[rs1] | Decoder::I_FMT_imm(instruction);
-            printf("ori\n");
+            LOG_INST(pc, "ori");
         }
         // andi
         if (op == 0b0010011 && funct3 == 0x7) {
             reg[rd] = reg[rs1] & Decoder::I_FMT_imm(instruction);
-            printf("andi\n");
+            LOG_INST(pc, "andi");
         }
         // slli
         if (op == 0b0010011 && funct3 == 0x1 && Decoder::getSHType(instruction) == 0x00) {
             reg[rd] = reg[rs1] << Decoder::getShift(instruction);
-            printf("slli\n");
+            LOG_INST(pc, "slli");
         }
         // srli
         if (op == 0b0010011 && funct3 == 0x5 && Decoder::getSHType(instruction) == 0x00) {
             reg[rd] = reg[rs1] >> Decoder::getShift(instruction);
-            printf("srli\n");
+            LOG_INST(pc, "srli");
         }
         // srai
         if (op == 0b0010011 && funct3 == 0x5 && Decoder::getSHType(instruction) == 0x20) {
             uint8_t shift = Decoder::getShift(instruction);
             reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) >> shift);
-            printf("srai\n");
+            LOG_INST(pc, "srai");
         }
         // slti
         if (op == 0b0010011 && funct3 == 0x2) {
             reg[rd] = static_cast<int32_t>(reg[rs1]) < Decoder::I_FMT_imm(instruction);
-            printf("slti\n");
+            LOG_INST(pc, "slti");
         }
         // sltiu
         if (op == 0b0010011 && funct3 == 0x3) {
             reg[rd] = reg[rs1] < static_cast<uint32_t>(Decoder::I_FMT_imm(instruction));
-            printf("sltiu\n");
+            LOG_INST(pc, "sltiu");
         }
 
         // add
         if (op == 0b0110011 && funct3 == 0x0 && funct7 == 0x00) {
             reg[rd] = reg[rs1] + reg[rs2];
-            printf("add\n");
+            LOG_INST(pc, "add");
         }
         // sub
         if (op == 0b0110011 && funct3 == 0x0 && funct7 == 0x20) {
             reg[rd] = reg[rs1] - reg[rs2];
-            printf("sub\n");
+            LOG_INST(pc, "sub");
         }
         // xor
-        if (op == 0b0110011 && funct3 == 0x4) {
+        if (op == 0b0110011 && funct3 == 0x4 && funct7 == 0x00) {
             reg[rd] = reg[rs1] ^ reg[rs2];
-            printf("xor\n");
+            LOG_INST(pc, "xor");
         }
         // or
-        if (op == 0b0110011 && funct3 == 0x6) {
+        if (op == 0b0110011 && funct3 == 0x6 && funct7 == 0x00) {
             reg[rd] = reg[rs1] | reg[rs2];
-            printf("or\n");
+            LOG_INST(pc, "or");
         }
         // and
-        if (op == 0b0110011 && funct3 == 0x7) {
+        if (op == 0b0110011 && funct3 == 0x7 && funct7 == 0x00) {
             reg[rd] = reg[rs1] & reg[rs2];
-            printf("and\n");
+            LOG_INST(pc, "and");
         }
         // sll
-        if (op == 0b0110011 && funct3 == 0x1) {
+        if (op == 0b0110011 && funct3 == 0x1 && funct7 == 0x00) {
             reg[rd] = reg[rs1] << (reg[rs2] & 0x1f);
-            printf("sll\n");
+            LOG_INST(pc, "sll");
         }
         // srl
         if (op == 0b0110011 && funct3 == 0x5 && funct7 == 0x00) {
             reg[rd] = reg[rs1] >> (reg[rs2] & 0x1f);
-            printf("srl\n");
+            LOG_INST(pc, "srl");
         }
         // sra
         if (op == 0b0110011 && funct3 == 0x5 && funct7 == 0x20) {
             uint8_t shift = static_cast<uint8_t>(reg[rs2] & 0x1f);
             reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) >> shift);
-            printf("sra\n");
+            LOG_INST(pc, "sra");
         }
         // slt
-        if (op == 0b0110011 && funct3 == 0x2) {
+        if (op == 0b0110011 && funct3 == 0x2 && funct7 == 0x00) {
             reg[rd] = static_cast<int32_t>(reg[rs1]) < static_cast<int32_t>(reg[rs2]);
-            printf("slt\n");
+            LOG_INST(pc, "slt");
         }
         // sltu
-        if (op == 0b0110011 && funct3 == 0x3) {
+        if (op == 0b0110011 && funct3 == 0x3 && funct7 == 0x00) {
             reg[rd] = reg[rs1] < reg[rs2];
-            printf("sltu\n");
+            LOG_INST(pc, "sltu");
         }
         // lb
         if (op == 0b0000011 && funct3 == 0x0) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
             reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(mem[address])));
-            printf("lb\n");
+            LOG_INST(pc, "lb");
         }
         // lbu
         if (op == 0b0000011 && funct3 == 0x4) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
             reg[rd] = static_cast<uint32_t>(mem[address]);
-            printf("lbu\n");
+            LOG_INST(pc, "lbu");
         }
         // lh
         if (op == 0b0000011 && funct3 == 0x1) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
             reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(mem[address] | mem[address + 1] << 8)));
-            printf("lh\n");
+            LOG_INST(pc, "lh");
         }
         // lhu
         if (op == 0b0000011 && funct3 == 0x5) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
             reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8);
-            printf("lhu\n");
+            LOG_INST(pc, "lhu");
         }
         // lw
         if (op == 0b0000011 && funct3 == 0x2) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            printf("address: 0x%X\n", address);
             reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8 | mem[address + 2] << 16 | mem[address + 3] << 24);
-            printf("lw\n");
+            LOG_INST(pc, "lw");
         }
 
         // sb
         if (op == 0b0100011 && funct3 == 0x0) {
             uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
             mem[address] = static_cast<uint8_t>(reg[rs2] & 0xFF);
-            printf("sb\n");
+            LOG_INST(pc, "sb");
         }
         // sh
         if (op == 0b0100011 && funct3 == 0x1) {
             uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
             mem[address] = static_cast<uint8_t>(reg[rs2] & 0xFF);
             mem[address + 1] = static_cast<uint8_t>((reg[rs2] >> 8) & 0xFF);
-            printf("sh\n");
+            LOG_INST(pc, "sh");
         }
         // sw
         if (op == 0b0100011 && funct3 == 0x2) {
@@ -232,7 +242,7 @@ int main(int argc, char** argv) {
             mem[address + 1] = static_cast<uint8_t>((reg[rs2] >> 8) & 0xFF);
             mem[address + 2] = static_cast<uint8_t>((reg[rs2] >> 16) & 0xFF);
             mem[address + 3] = static_cast<uint8_t>((reg[rs2] >> 24) & 0xFF);
-            printf("sw\n");
+            LOG_INST(pc, "sw");
         }
 
         // beq
@@ -240,67 +250,67 @@ int main(int argc, char** argv) {
             if (reg[rs1] == reg[rs2]) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            printf("beq\n");
+            LOG_INST(pc, "beq");
         }
         // bne
         if (op == 0b1100011 && funct3 == 0x1) {
             if (reg[rs1] != reg[rs2]) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            printf("bne\n");
+            LOG_INST(pc, "bne");
         }
         // blt
         if (op == 0b1100011 && funct3 == 0x4) {
             if (static_cast<int32_t>(reg[rs1]) < static_cast<int32_t>(reg[rs2])) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            printf("blt\n");
+            LOG_INST(pc, "blt");
         }
         // bge
         if (op == 0b1100011 && funct3 == 0x5) {
             if (static_cast<int32_t>(reg[rs1]) >= static_cast<int32_t>(reg[rs2])) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            printf("bge\n");
+            LOG_INST(pc, "bge");
         }
         // bltu
         if (op == 0b1100011 && funct3 == 0x6) {
             if (reg[rs1] < reg[rs2]) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            printf("bltu\n");
+            LOG_INST(pc, "bltu");
         }
         // bgeu
         if (op == 0b1100011 && funct3 == 0x7) {
             if (reg[rs1] >= reg[rs2]) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            printf("bgeu\n");
+            LOG_INST(pc, "bgeu");
         }
 
         // jal
         if (op == 0b1101111) {
             reg[rd] = pc + 4;
             pc += Decoder::J_FMT_imm(instruction) - 4;
-            printf("jal\n");
+            LOG_INST(pc, "jal");
         }
         // jalr
         if (op == 0b1100111 && funct3 == 0x0) {
             reg[rd] = pc + 4;
 
             pc = Decoder::I_FMT_imm(instruction) + reg[rs1] - 4;
-            printf("jalr\n");
+            LOG_INST(pc, "jalr");
         }
 
         // lui
         if (op == 0b0110111) {
             reg[rd] = Decoder::U_FMT_imm(instruction) << 12;
-            printf("lui\n");
+            LOG_INST(pc, "lui");
         }
         // auipc
         if (op == 0b0010111) {
             pc += Decoder::U_FMT_imm(instruction) << 12;
-            printf("auipc\n");
+            LOG_INST(pc, "auipc");
         }
 
         // ecall
@@ -315,7 +325,70 @@ int main(int argc, char** argv) {
                 default:
                     std::cout << "Unknown ecall with code " << reg[17] << std::endl;
             }
-            printf("ecall\n");
+            LOG_INST(pc, "ecall");
+        }
+
+        // RV32M
+
+        // mul
+        if (op == 0b0110011 && funct3 == 0x0 && funct7 == 0x01) {
+            reg[rd] = static_cast<uint64_t>(reg[rs1]) * static_cast<uint64_t>(reg[rs2]) & 0xFFFFFFFF;
+            LOG_INST(pc, "mul");
+        }
+        // mulh
+        if (op == 0b0110011 && funct3 == 0x1 && funct7 == 0x01) {
+            reg[rd] = (static_cast<int64_t>(static_cast<int32_t>(reg[rs1])) * static_cast<int64_t>(static_cast<int32_t>(reg[rs2]))) >> 32;
+            LOG_INST(pc, "mulh");
+        }
+        // mulhsu
+        if (op == 0b0110011 && funct3 == 0x2 && funct7 == 0x01) {
+            reg[rd] = (static_cast<int64_t>(static_cast<int32_t>(reg[rs1])) * static_cast<uint64_t>(reg[rs2])) >> 32;
+            LOG_INST(pc, "mulhsu");
+        }
+        // mulhu
+        if (op == 0b0110011 && funct3 == 0x3 && funct7 == 0x01) {
+            reg[rd] = (static_cast<uint64_t>(reg[rs1]) * static_cast<uint64_t>(reg[rs2])) >> 32;
+            LOG_INST(pc, "mulhu");
+        }
+        // div
+        if (op == 0b0110011 && funct3 == 0x4 && funct7 == 0x01) {
+            if (reg[rs2] == 0) {
+                reg[rd] = -1;
+            } else if (reg[rs1] == 0x80000000 && reg[rs2] == 0xFFFFFFFF) {
+                reg[rd] = 0x80000000;
+            } else {
+                reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) / static_cast<int32_t>(reg[rs2]));
+            }
+            LOG_INST(pc, "div");
+        }
+        // divu
+        if (op == 0b0110011 && funct3 == 0x5 && funct7 == 0x01) {
+            if (reg[rs2] == 0) {
+                reg[rd] = 0xFFFFFFFF;
+            } else {
+                reg[rd] = reg[rs1] / reg[rs2];
+            }
+            LOG_INST(pc, "divu");
+        }
+        // rem
+        if (op == 0b0110011 && funct3 == 0x6 && funct7 == 0x01) {
+            if (reg[rs2] == 0) {
+                reg[rd] = reg[rs1];
+            } else if (reg[rs1] == 0x80000000 && reg[rs2] == 0xFFFFFFFF) {
+                reg[rd] = 0;
+            } else {
+                reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) % static_cast<int32_t>(reg[rs2]));
+            }
+            LOG_INST(pc, "rem");
+        }
+        // remu
+        if (op == 0b0110011 && funct3 == 0x7 && funct7 == 0x01) {
+            if (reg[rs2] == 0) {
+                reg[rd] = reg[rs2];
+            } else {
+                reg[rd] = reg[rs1] % reg[rs2];
+            }
+            LOG_INST(pc, "remu");
         }
 
         pc += 4;

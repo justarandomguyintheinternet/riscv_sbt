@@ -1,5 +1,5 @@
 set(RISCV_CC riscv64-unknown-elf-gcc)
-set(RISCV_FLAGS -march=rv32i -mabi=ilp32 -nostartfiles -nostdlib -O0 -specs=picolibc.specs --entry main -T ${CMAKE_CURRENT_SOURCE_DIR}/link.ld)
+set(RISCV_FLAGS -march=rv32im -mabi=ilp32 -nostartfiles -nostdlib -O0 -specs=picolibc.specs --entry main -T ${CMAKE_CURRENT_SOURCE_DIR}/link.ld)
 set(ELF_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 
 # make output directory if it doesnt exist

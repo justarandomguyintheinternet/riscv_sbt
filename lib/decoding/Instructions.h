@@ -44,6 +44,15 @@ enum class EInstruction {
     ECALL,
     EBREAK,
     FENCE,
+    // RV32M
+    MUL,
+    MULH,
+    MULHSU,
+    MULHU,
+    DIV,
+    DIVU,
+    REM,
+    REMU,
     INVALID
 };
 
@@ -68,7 +77,7 @@ struct InstructionSpec {
     uint32_t bits_pattern; // Expected bits to be set
 };
 
-inline constexpr InstructionSpec specs[] = {
+inline constexpr InstructionSpec RV32I[] = {
     // R FMT: opcode + funct3 + funct7
     { EInstruction::ADD,    EInstructionFMT::R, 0b0110011, true,  0x0, true,  0x00, 0x0, 0x0 },
     { EInstruction::SUB,    EInstructionFMT::R, 0b0110011, true,  0x0, true,  0x20, 0x0, 0x0 },
@@ -126,6 +135,17 @@ inline constexpr InstructionSpec specs[] = {
     // ecall / ebreak: opcode only, differentiated by bits_mask/pattern (funct12 field [31:20])
     { EInstruction::ECALL,  EInstructionFMT::I, 0b1110011, false, 0x0, false, 0x00, 0xFFF00000, 0x00000000 },
     { EInstruction::EBREAK, EInstructionFMT::I, 0b1110011, false, 0x0, false, 0x00, 0xFFF00000, 0x00100000 },
+};
+
+inline constexpr InstructionSpec RV32M[] = {
+    { EInstruction::MUL,     EInstructionFMT::R, 0b0110011, true,  0x0, true,  0x01 },
+    { EInstruction::MULH,    EInstructionFMT::R, 0b0110011, true,  0x1, true,  0x01 },
+    { EInstruction::MULHSU,  EInstructionFMT::R, 0b0110011, true,  0x2, true,  0x01 },
+    { EInstruction::MULHU,   EInstructionFMT::R, 0b0110011, true,  0x3, true,  0x01 },
+    { EInstruction::DIV,     EInstructionFMT::R, 0b0110011, true,  0x4, true,  0x01 },
+    { EInstruction::DIVU,    EInstructionFMT::R, 0b0110011, true,  0x5, true,  0x01 },
+    { EInstruction::REM,     EInstructionFMT::R, 0b0110011, true,  0x6, true,  0x01 },
+    { EInstruction::REMU,    EInstructionFMT::R, 0b0110011, true,  0x7, true,  0x01 }
 };
 
 #endif //RISCV_EMU_INSTRUCTIONS_H
