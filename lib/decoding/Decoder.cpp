@@ -1,4 +1,5 @@
 #include "Decoder.h"
+#include <span>
 
 namespace Decoder {
     uint8_t getFunct3(uint32_t instruction) {
@@ -68,42 +69,46 @@ namespace Decoder {
     }
 
     Instruction decode(uint32_t data, uint32_t address) {
-        for (auto& spec : specs) {
-            if (getOpcode(data) == spec.opcode &&
-                (spec.useFunct3 ? getFunct3(data) == spec.funct3 : true) &&
-                (spec.useFunct7 ? getFunct7(data) == spec.funct7 : true) &&
-                (spec.bits_mask == 0 || (data & spec.bits_mask) == spec.bits_pattern)) {
+        static constexpr std::span<const InstructionSpec> SPEC_LISTS[] = { RV32I, RV32M };
 
-                Instruction instr{};
+        for (auto list : SPEC_LISTS) {
+            for (auto& spec : list) {
+                if (getOpcode(data) == spec.opcode &&
+                    (spec.useFunct3 ? getFunct3(data) == spec.funct3 : true) &&
+                    (spec.useFunct7 ? getFunct7(data) == spec.funct7 : true) &&
+                    (spec.bits_mask == 0 || (data & spec.bits_mask) == spec.bits_pattern)) {
 
-                instr.type = spec.type;
-                instr.instruction = data;
-                instr.rs1 = getRS1(data);
-                instr.rs2 = getRS2(data);
-                instr.rd = getRD(data);
-                instr.address = address;
+                    Instruction instr{};
 
-                switch (spec.format) {
-                    case EInstructionFMT::R:
-                        break;
-                    case EInstructionFMT::I:
-                        instr.immediate = I_FMT_imm(data);
-                        break;
-                    case EInstructionFMT::S:
-                        instr.immediate = S_FMT_imm(data);
-                        break;
-                    case EInstructionFMT::B:
-                        instr.immediate = B_FMT_imm(data);
-                        break;
-                    case EInstructionFMT::J:
-                        instr.immediate = J_FMT_imm(data);
-                        break;
-                    case EInstructionFMT::U:
-                        instr.immediate = U_FMT_imm(data);
-                        break;
+                    instr.type = spec.type;
+                    instr.instruction = data;
+                    instr.rs1 = getRS1(data);
+                    instr.rs2 = getRS2(data);
+                    instr.rd = getRD(data);
+                    instr.address = address;
+
+                    switch (spec.format) {
+                        case EInstructionFMT::R:
+                            break;
+                        case EInstructionFMT::I:
+                            instr.immediate = I_FMT_imm(data);
+                            break;
+                        case EInstructionFMT::S:
+                            instr.immediate = S_FMT_imm(data);
+                            break;
+                        case EInstructionFMT::B:
+                            instr.immediate = B_FMT_imm(data);
+                            break;
+                        case EInstructionFMT::J:
+                            instr.immediate = J_FMT_imm(data);
+                            break;
+                        case EInstructionFMT::U:
+                            instr.immediate = U_FMT_imm(data);
+                            break;
+                    }
+                    return instr;
                 }
-                return instr;
-                }
+            }
         }
 
         return { .type = EInstruction::INVALID };

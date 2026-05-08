@@ -218,6 +218,59 @@ void emitInstruction(const Instruction& instruction) {
             break;
         case EInstruction::FENCE:
             break;
+        // RV32-M
+        case EInstruction::MUL:
+            emit(std::format("reg[{}] = static_cast<uint64_t>(reg[{}]) * static_cast<uint64_t>(reg[{}]) & 0xFFFFFFFF;\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::MULH:
+            emit(std::format("reg[{}] = (static_cast<int64_t>(static_cast<int32_t>(reg[{}])) * static_cast<int64_t>(static_cast<int32_t>(reg[{}]))) >> 32;\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::MULHSU:
+            emit(std::format("reg[{}] = (static_cast<int64_t>(static_cast<int32_t>(reg[{}])) * static_cast<uint64_t>(reg[{}])) >> 32;\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::MULHU:
+            emit(std::format("reg[{}] = (static_cast<uint64_t>(reg[{}]) * static_cast<uint64_t>(reg[{}])) >> 32;\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::DIV:
+            emit(std::format(R"(
+                if (reg[{}] == 0) {{
+                    reg[{}] = -1;
+                }} else if (reg[{}] == 0x80000000 && reg[{}] == 0xFFFFFFFF) {{
+                    reg[{}] = 0x80000000;
+                }} else {{
+                    reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(reg[{}]) / static_cast<int32_t>(reg[{}]));
+                }}
+            )", instruction.rs2, instruction.rd, instruction.rs1, instruction.rs2, instruction.rd, instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::DIVU:
+            emit(std::format(R"(
+                if (reg[{}] == 0) {{
+                    reg[{}] = 0xFFFFFFFF;
+                }} else {{
+                    reg[{}] = reg[{}] / reg[{}];
+                }}
+            )", instruction.rs2, instruction.rd, instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::REM:
+            emit(std::format(R"(
+                if (reg[{}] == 0) {{
+                    reg[{}] = reg[{}];
+                }} else if (reg[{}] == 0x80000000 && reg[{}] == 0xFFFFFFFF) {{
+                    reg[{}] = 0x80000000;
+                }} else {{
+                    reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(reg[{}]) % static_cast<int32_t>(reg[{}]));
+                }}
+            )", instruction.rs2, instruction.rd, instruction.rs1, instruction.rs1, instruction.rs2, instruction.rd, instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
+        case EInstruction::REMU:
+            emit(std::format(R"(
+                if (reg[{}] == 0) {{
+                    reg[{}] = reg[{}];
+                }} else {{
+                    reg[{}] = reg[{}] % reg[{}];
+                }}
+            )", instruction.rs2, instruction.rd, instruction.rs1, instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            break;
         case EInstruction::INVALID:
             emit(std::format("// Invalid instruction at 0x{:X}\n", instruction.address));
             break;
