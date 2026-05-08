@@ -384,7 +384,7 @@ int main(int argc, char** argv) {
         // remu
         if (op == 0b0110011 && funct3 == 0x7 && funct7 == 0x01) {
             if (reg[rs2] == 0) {
-                reg[rd] = reg[rs2];
+                reg[rd] = reg[rs1];
             } else {
                 reg[rd] = reg[rs1] % reg[rs2];
             }
