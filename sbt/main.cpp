@@ -128,45 +128,41 @@ void emitInstruction(const Instruction& instruction) {
             break;
         case EInstruction::LB:
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(mem[address])));\n", instruction.rd), instruction.rd);
+            emit(std::format("reg[{}] = static_cast<int32_t>(static_cast<int8_t>(mem[address]));\n", instruction.rd), instruction.rd);
             break;
         case EInstruction::LH: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(mem[address] | mem[address + 1] << 8)));\n", instruction.rd), instruction.rd);
+            emit(std::format("reg[{}] = static_cast<int32_t>(*reinterpret_cast<int16_t *>(&mem[address]));\n", instruction.rd), instruction.rd);
             break;
         }
         case EInstruction::LW: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[{}] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8 | mem[address + 2] << 16 | mem[address + 3] << 24);\n", instruction.rd), instruction.rd);
+            emit(std::format("reg[{}] = *reinterpret_cast<uint32_t *>(&mem[address]);\n", instruction.rd), instruction.rd);
             break;
         }
         case EInstruction::LBU: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[{}] = static_cast<uint32_t>(mem[address]);\n", instruction.rd), instruction.rd);
+            emit(std::format("reg[{}] = mem[address];\n", instruction.rd), instruction.rd);
             break;
         }
         case EInstruction::LHU: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8);\n", instruction.rd), instruction.rd);
+            emit(std::format("reg[{}] = *reinterpret_cast<uint16_t *>(&mem[address]);\n", instruction.rd), instruction.rd);
             break;
         }
         case EInstruction::SB: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("mem[address] = static_cast<uint8_t>(reg[{}] & 0xFF);\n", instruction.rs2));
+            emit(std::format("mem[address] = static_cast<uint8_t>(reg[{}]);\n", instruction.rs2));
             break;
         }
         case EInstruction::SH: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("mem[address] = static_cast<uint8_t>(reg[{}] & 0xFF);\n", instruction.rs2));
-            emit(std::format("mem[address + 1] = static_cast<uint8_t>((reg[{}] >> 8) & 0xFF);\n", instruction.rs2));
+            emit(std::format("*reinterpret_cast<uint16_t *>(&mem[address]) = static_cast<uint16_t>(reg[{}]);\n", instruction.rs2));
             break;
         }
         case EInstruction::SW: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("mem[address] = static_cast<uint8_t>(reg[{}] & 0xFF);\n", instruction.rs2));
-            emit(std::format("mem[address + 1] = static_cast<uint8_t>((reg[{}] >> 8) & 0xFF);\n", instruction.rs2));
-            emit(std::format("mem[address + 2] = static_cast<uint8_t>((reg[{}] >> 16) & 0xFF);\n", instruction.rs2));
-            emit(std::format("mem[address + 3] = static_cast<uint8_t>((reg[{}] >> 24) & 0xFF);\n", instruction.rs2));
+            emit(std::format("*reinterpret_cast<uint32_t *>(&mem[address]) = reg[{}];\n", instruction.rs2));
             break;
         }
         case EInstruction::BEQ:

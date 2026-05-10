@@ -194,54 +194,50 @@ int main(int argc, char** argv) {
         // lb
         if (op == 0b0000011 && funct3 == 0x0) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(mem[address])));
+            reg[rd] = static_cast<int32_t>(static_cast<int8_t>(mem[address]));
             LOG_INST(pc, "lb");
         }
         // lbu
         if (op == 0b0000011 && funct3 == 0x4) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(mem[address]);
+            reg[rd] = mem[address];
             LOG_INST(pc, "lbu");
         }
         // lh
         if (op == 0b0000011 && funct3 == 0x1) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(mem[address] | mem[address + 1] << 8)));
+            reg[rd] = static_cast<int32_t>(*reinterpret_cast<int16_t *>(&mem[address]));
             LOG_INST(pc, "lh");
         }
         // lhu
         if (op == 0b0000011 && funct3 == 0x5) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8);
+            reg[rd] = *reinterpret_cast<uint16_t *>(&mem[address]);
             LOG_INST(pc, "lhu");
         }
         // lw
         if (op == 0b0000011 && funct3 == 0x2) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = static_cast<uint32_t>(mem[address] | mem[address + 1] << 8 | mem[address + 2] << 16 | mem[address + 3] << 24);
+            reg[rd] = *reinterpret_cast<uint32_t *>(&mem[address]);
             LOG_INST(pc, "lw");
         }
 
         // sb
         if (op == 0b0100011 && funct3 == 0x0) {
             uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
-            mem[address] = static_cast<uint8_t>(reg[rs2] & 0xFF);
+            mem[address] = static_cast<uint8_t>(reg[rs2]);
             LOG_INST(pc, "sb");
         }
         // sh
         if (op == 0b0100011 && funct3 == 0x1) {
             uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
-            mem[address] = static_cast<uint8_t>(reg[rs2] & 0xFF);
-            mem[address + 1] = static_cast<uint8_t>((reg[rs2] >> 8) & 0xFF);
+            *reinterpret_cast<uint16_t *>(&mem[address]) = static_cast<uint16_t>(reg[rs2]);
             LOG_INST(pc, "sh");
         }
         // sw
         if (op == 0b0100011 && funct3 == 0x2) {
             uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
-            mem[address] = static_cast<uint8_t>(reg[rs2] & 0xFF);
-            mem[address + 1] = static_cast<uint8_t>((reg[rs2] >> 8) & 0xFF);
-            mem[address + 2] = static_cast<uint8_t>((reg[rs2] >> 16) & 0xFF);
-            mem[address + 3] = static_cast<uint8_t>((reg[rs2] >> 24) & 0xFF);
+            *reinterpret_cast<uint32_t *>(&mem[address]) = reg[rs2];
             LOG_INST(pc, "sw");
         }
 
