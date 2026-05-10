@@ -3,6 +3,7 @@
 #include <iomanip>
 #include "../lib/elf/ElfBinary.h"
 #include <format>
+#include <set>
 
 // load binary
 // decode all instructions into vector of instructions
@@ -63,9 +64,11 @@ void emitLoadSaveAddress(const Instruction& instruction) {
     emit(std::format("address = reg[{}] + {};\n", instruction.rs1, instruction.immediate));
 }
 
-void emitInstruction(const Instruction& instruction) {
+void emitInstruction(const Instruction& instruction, bool isLeader) {
     indent = 2;
-    emit(std::format("L{:X}:\n", instruction.address));
+    if (isLeader) {
+        emit(std::format("L{:X}:\n", instruction.address));
+    }
     indent = 3;
 
     switch (instruction.type) {
@@ -273,9 +276,32 @@ void emitInstruction(const Instruction& instruction) {
     }
 }
 
+std::set<uint32_t> getBasicBlocksLeaders(std::vector<Instruction>& instructions) {
+    std::set<uint32_t> leaders;
+
+    if (instructions.empty()) {
+        return leaders;
+    }
+
+    leaders.insert(instructions.front().address);
+
+    for (auto& instruction: instructions) {
+        if (instruction.type == EInstruction::BEQ || instruction.type == EInstruction::BNE ||
+            instruction.type == EInstruction::BLT || instruction.type == EInstruction::BGE ||
+            instruction.type == EInstruction::BLTU || instruction.type == EInstruction::BGEU ||
+            instruction.type == EInstruction::JAL ) {
+            leaders.insert(instruction.address + instruction.immediate);
+            leaders.insert(instruction.address + 4);
+        } else if (instruction.type == EInstruction::JALR) {
+            leaders.insert(instruction.address + 4);
+        }
+    }
+
+    return leaders;
+}
+
 // todo: make reg[0] read just const 0
 // todo: fill remaining values of dispatch table with handler for invalid instructions
-// todo: switch memory to uint32_t since it seems like most operations on it are lw/sw, might save some performance
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -291,13 +317,14 @@ int main(int argc, char** argv) {
     }
 
     binary.decodeToContainer(instructions);
+    std::set<uint32_t> leaders = getBasicBlocksLeaders(instructions);
     auto& text = binary.getSection(ElfBinarySection::Text).value().get();
 
     emit("#include <iostream>\n");
     emit("#include <cstdint>\n");
     emit("#include <iomanip>\n\n");
 
-    emit(std::format("uint32_t mem[0x{:X}];\n", STACK_SIZE));
+    emit(std::format("uint8_t mem[0x{:X}];\n", STACK_SIZE));
     emit("uint32_t reg[32];\n");
     emit(std::format("uint32_t pc = 0x{:X};\n\n", binary.getSymbolAddress("main").value_or(0)));
     emit(std::format("void* dispatch[{}] = {{0}};\n", text.getSize()));
@@ -311,7 +338,11 @@ int main(int argc, char** argv) {
 
     // build dispatch table https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
     for (const auto& inst : instructions) {
-        emit(std::format("\tdispatch[{}] = &&L{:X};\n", (inst.address - text.getStartAddress()) / 4, inst.address));
+        if (leaders.contains(inst.address)) {
+            emit(std::format("\tdispatch[{}] = &&L{:X};\n", (inst.address - text.getStartAddress()) / 4, inst.address));
+        } else {
+            emit(std::format("\tdispatch[{}] = &&INVALID;\n", (inst.address - text.getStartAddress()) / 4));
+        }
     }
 
     // load static data
@@ -337,11 +368,17 @@ int main(int argc, char** argv) {
     emit("\t\tgoto *dispatch[pcDispatchIndex];\n\n");
 
     for (const auto& inst : instructions) {
-        emitInstruction(inst);
+        emitInstruction(inst, leaders.contains(inst.address));
     }
 
+    indent = 1;
+    emit("}\n");
+
+    emit("INVALID:\n");
+    emit("\tstd::cout << \"Invalid instruction at 0x\" << std::hex << pc << std::dec << std::endl;\n");
+    emit("\treturn 1;\n");
+
     indent = 0;
-    emit("\t}\n");
     emit("}\n");
 
     return 0;
