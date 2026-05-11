@@ -126,6 +126,7 @@ void ElfBinary::decode() {
     }
 }
 
+// Returns first section with the corresponding SectionType
 std::optional<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getSection(ElfBinarySection::SectionType type) const {
     for (const auto& section : sections) {
         if (section.getType() == type) {
@@ -133,6 +134,17 @@ std::optional<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getSect
         }
     }
     return std::nullopt;
+}
+
+std::vector<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getDataSections() const {
+    std::vector<std::reference_wrapper<const ElfBinarySection>> dataSections;
+
+    for (const auto& section : sections) {
+        if (section.getType() == ElfBinarySection::Data) {
+            dataSections.push_back(section);
+        }
+    }
+    return dataSections;
 }
 
 void ElfBinary::loadToMemory(uint8_t* memory) const {

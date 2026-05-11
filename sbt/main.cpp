@@ -337,8 +337,8 @@ int main(int argc, char** argv) {
     }
 
     // load static data
-    if (binary.getSection(ElfBinarySection::Data).has_value()) {
-        auto& dataSection = binary.getSection(ElfBinarySection::Data).value().get();
+    for (const auto& ref : binary.getDataSections()) {
+        const auto& dataSection = ref.get();
         uint32_t dataAddr = dataSection.getStartAddress();
 
         for (auto word : dataSection.getData()) {
