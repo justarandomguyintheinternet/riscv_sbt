@@ -23,3 +23,6 @@ endforeach()
 add_custom_target(test_programs
         DEPENDS ${TEST_OUTPUTS}
 )
+
+# add all files to some dummy target, so that clion highlighting works
+add_library(test_sources_ide EXCLUDE_FROM_ALL ${TEST_SOURCES})

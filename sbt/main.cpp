@@ -1,23 +1,13 @@
-#include <iostream>
-#include <bitset>
-#include <iomanip>
 #include "../lib/elf/ElfBinary.h"
+#include <iostream>
+#include <fstream>
+#include <bitset>
 #include <format>
 #include <set>
 
-// load binary
-// decode all instructions into vector of instructions
-// write out program:
-//    include maybe printf
-//    create memory array
-//    fill memory array with data
-//    init pc, ra, gp
-//    switch over PC
-//    iterate all instructions, create switch case with label being address of instruction
-//    end prologue
-
 std::vector<Instruction> instructions;
 uint8_t indent = 0;
+std::ofstream output;
 
 #define BASE_RA 0xdeadbeef
 #define STACK_SIZE 0x80000
@@ -25,9 +15,9 @@ uint8_t indent = 0;
 
 void emit(std::string_view text) {
     for (size_t i = 0; i < indent; ++i) {
-        std::cout << "\t";
+        output << "\t";
     }
-    std::cout << text;
+    output << text;
 }
 
 // Useful for e.g. omitting instructions that write to x0
@@ -276,7 +266,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
     }
 }
 
-std::set<uint32_t> getBasicBlocksLeaders(std::vector<Instruction>& instructions) {
+std::set<uint32_t> getBasicBlocksLeaders(const std::vector<Instruction>& instructions) {
     std::set<uint32_t> leaders;
 
     if (instructions.empty()) {
@@ -301,7 +291,6 @@ std::set<uint32_t> getBasicBlocksLeaders(std::vector<Instruction>& instructions)
 }
 
 // todo: make reg[0] read just const 0
-// todo: fill remaining values of dispatch table with handler for invalid instructions
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -319,6 +308,8 @@ int main(int argc, char** argv) {
     binary.decodeToContainer(instructions);
     std::set<uint32_t> leaders = getBasicBlocksLeaders(instructions);
     auto& text = binary.getSection(ElfBinarySection::Text).value().get();
+
+    output.open("./sbt/output/translated.cpp");
 
     emit("#include <iostream>\n");
     emit("#include <cstdint>\n");
@@ -351,12 +342,7 @@ int main(int argc, char** argv) {
         uint32_t dataAddr = dataSection.getStartAddress();
 
         for (auto word : dataSection.getData()) {
-            emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr, static_cast<uint8_t>(word & 0xFF)));
-            emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 1, static_cast<uint8_t>((word >> 8) & 0xFF)));
-            emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 2, static_cast<uint8_t>((word >> 16) & 0xFF)));
-            emit(std::format("\tmem[0x{:X}] = 0x{:X};", dataAddr + 3, static_cast<uint8_t>((word >> 24) & 0xFF)));
-            emit(std::format(" // 0x{:X}\n", word));
-
+            emit(std::format("\t*reinterpret_cast<uint32_t *>(&mem[0x{:X}]) = 0x{:X};\n", dataAddr, word));
             dataAddr += 4;
         }
     }
@@ -380,6 +366,8 @@ int main(int argc, char** argv) {
 
     indent = 0;
     emit("}\n");
+
+    output.close();
 
     return 0;
 }

@@ -5,7 +5,7 @@ ElfBinarySection::SectionType ElfBinarySection::stringToType(const std::string& 
     if (name == ".text") {
         return Text;
     }
-    if (name == ".sdata" || name == ".rodata") {
+    if (name == ".sdata" || name == ".rodata" || name == ".data") {
         return Data;
     }
     return Other;
