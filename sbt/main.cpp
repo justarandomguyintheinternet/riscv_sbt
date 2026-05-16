@@ -189,7 +189,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             emit(std::format("reg[{}] = {} << 12;\n", instruction.rd, instruction.immediate), instruction.rd);
             break;
         case EInstruction::AUIPC:
-            emit(std::format("goto L{:X};\n", instruction.address + (instruction.immediate << 12)));
+            emit(std::format("reg[{}] = pc + 0x{:X};\n", instruction.rd, instruction.immediate), instruction.rd);
             break;
         case EInstruction::ECALL:
             emit(MULTILINE(switch (reg[17]) {

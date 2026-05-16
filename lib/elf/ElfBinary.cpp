@@ -147,10 +147,15 @@ std::vector<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getDataSe
     return dataSections;
 }
 
-void ElfBinary::loadToMemory(uint8_t* memory) const {
+void ElfBinary::loadToMemory(uint8_t* memory, uint32_t size) const {
     for (auto& section : getSections()) {
         printf("Loading section %s\n", section.getName().c_str());
         uint32_t addr = section.getStartAddress();
+
+        if (addr + section.getSize() * 4 > size) {
+            printf("Section %s exceeds memory size\n", section.getName().c_str());
+            continue;
+        }
 
         for (const auto word : section.getData()) {
             memory[addr] = static_cast<uint8_t>(word & 0xFF);
@@ -160,4 +165,11 @@ void ElfBinary::loadToMemory(uint8_t* memory) const {
             addr += 4;
         }
     }
+}
+
+int32_t ElfBinary::getEntryAddress() const {
+    GElf_Ehdr header;
+    gelf_getehdr(elf, &header); // if we got this far, this should never fail
+
+    return header.e_entry;
 }

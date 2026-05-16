@@ -22,7 +22,7 @@ public:
     };
 
     LoadResult load();
-    void loadToMemory(uint8_t* memory) const;
+    void loadToMemory(uint8_t* memory, uint32_t size) const;
 
     template<typename Container>
     void decodeToContainer(Container& container) const {
@@ -47,6 +47,7 @@ public:
     std::vector<std::reference_wrapper<const ElfBinarySection>> getDataSections() const;
     std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(ElfBinarySection::SectionType type) const;
     std::optional<uint32_t> getSymbolAddress(const char* symbolName) const;
+    int32_t getEntryAddress() const;
 
 private:
     void decode();
