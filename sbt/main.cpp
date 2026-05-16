@@ -186,10 +186,10 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             emit("continue;\n");
             break;
         case EInstruction::LUI:
-            emit(std::format("reg[{}] = {} << 12;\n", instruction.rd, instruction.immediate), instruction.rd);
+            emit(std::format("reg[{}] = {};\n", instruction.rd, instruction.immediate << 12), instruction.rd);
             break;
         case EInstruction::AUIPC:
-            emit(std::format("reg[{}] = pc + 0x{:X};\n", instruction.rd, instruction.immediate), instruction.rd);
+            emit(std::format("reg[{}] = pc + 0x{:X};\n", instruction.rd, instruction.immediate << 12), instruction.rd);
             break;
         case EInstruction::ECALL:
             emit(MULTILINE(switch (reg[17]) {

@@ -305,7 +305,7 @@ int main(int argc, char** argv) {
         }
         // auipc
         if (op == 0b0010111) {
-            pc += Decoder::U_FMT_imm(instruction) << 12;
+            reg[rd] = pc + (Decoder::U_FMT_imm(instruction) << 12);
             LOG_INST(pc, "auipc");
         }
 
