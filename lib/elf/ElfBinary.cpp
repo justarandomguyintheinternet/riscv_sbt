@@ -83,6 +83,23 @@ std::optional<uint32_t> ElfBinary::getSymbolAddress(const char* symbolName) cons
 }
 
 void ElfBinary::decode() {
+    // collect program headers of type LOAD
+    size_t phdrCount = 0;
+    if (elf_getphdrnum(elf, &phdrCount) != 0) {
+        return;
+    }
+
+    std::vector<GElf_Phdr> loadSegments;
+    for (size_t i = 0; i < phdrCount; ++i) {
+        GElf_Phdr phdr;
+        if (gelf_getphdr(elf, static_cast<int>(i), &phdr) != &phdr) {
+            continue;
+        }
+        if (phdr.p_type == PT_LOAD) {
+            loadSegments.push_back(phdr);
+        }
+    }
+
     size_t sectionNameStringTableIndex;
     if (elf_getshdrstrndx(elf, &sectionNameStringTableIndex) != 0) {
         return;
@@ -104,6 +121,26 @@ void ElfBinary::decode() {
             continue;
         }
 
+        // find segment to which this section belongs, for getting the physical/load address (not virtual address)
+        const GElf_Phdr* matchedSegment = nullptr;
+        for (const auto& phdr : loadSegments) {
+            if (sectionHeader.sh_addr >= phdr.p_vaddr &&
+                sectionHeader.sh_addr < phdr.p_vaddr + phdr.p_memsz) {
+                matchedSegment = &phdr;
+                break;
+            }
+        }
+
+        if (!matchedSegment) {
+            continue;
+        }
+
+        ElfBinarySection::SegmentInfo segmentInfo {
+            static_cast<uint32_t>(matchedSegment->p_vaddr),
+            static_cast<uint32_t>(matchedSegment->p_paddr),
+            static_cast<uint32_t>(matchedSegment->p_flags)
+        };
+
         const Elf_Data* data = elf_getdata(section, nullptr);
         if (!data) {
             continue;
@@ -122,7 +159,7 @@ void ElfBinary::decode() {
             }
         }
 
-        sections.emplace_back(std::string(name), sectionHeader.sh_addr, std::move(sectionData));
+        sections.emplace_back(std::string(name), sectionHeader.sh_addr, std::move(sectionData), segmentInfo);
     }
 }
 
@@ -150,7 +187,8 @@ std::vector<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getDataSe
 void ElfBinary::loadToMemory(uint8_t* memory, uint32_t size) const {
     for (auto& section : getSections()) {
         printf("Loading section %s\n", section.getName().c_str());
-        uint32_t addr = section.getStartAddress();
+        const auto& seg = section.getSegmentInfo();
+        uint32_t addr = seg.loadAddress + (section.getStartAddress() - seg.virtualAddress); // calculate offset into the segment which is the same in virtual and physical address space
 
         if (addr + section.getSize() * 4 > size) {
             printf("Section %s exceeds memory size\n", section.getName().c_str());

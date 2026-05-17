@@ -4,12 +4,9 @@
 #include "elf/ElfBinary.h"
 #include "decoding/Decoder.h"
 
-uint8_t mem[0x80000];
-uint32_t reg[32] = { 0 };
-uint32_t pc = 0;
-
 #define BASE_RA 0xdeadbeef
 #define LOG_INSTRUCTIONS 0
+#define SIZE_MEM 0x80000
 
 #if LOG_INSTRUCTIONS == 1
     #define LOG_INST(addr, name) logInstruction(addr, name)
@@ -17,12 +14,9 @@ uint32_t pc = 0;
     #define LOG_INST(addr, name)
 #endif
 
-uint32_t inline readWord(uint32_t address) {
-    return static_cast<uint32_t>(mem[address])
-        | (static_cast<uint32_t>(mem[address + 1]) << 8)
-        | (static_cast<uint32_t>(mem[address + 2]) << 16)
-        | (static_cast<uint32_t>(mem[address + 3]) << 24);
-}
+uint8_t mem[SIZE_MEM];
+uint32_t reg[32] = { 0 };
+uint32_t pc = 0;
 
 void printInfo() {
     bool hasRegOutput = false;
@@ -75,17 +69,21 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    binary.loadToMemory(mem);
+    binary.loadToMemory(mem, SIZE_MEM);
+    pc = binary.getEntryAddress();
+    bool hasStartup = binary.getSymbolAddress("_start").has_value();
 
-    pc = binary.getSymbolAddress("main").value_or(0);
-    reg[1] = BASE_RA; // init ra
-    reg[2] = sizeof(mem); // init sp
-    reg[3] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
+    if (!hasStartup) {
+        std::cout << "No _start symbol found, using default init" << std::endl;
+        reg[1] = BASE_RA; // init ra
+        reg[2] = sizeof(mem); // init sp
+        reg[3] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
+    }
 
     while (true) {
         reg[0] = 0;
 
-        uint32_t instruction = readWord(pc);
+        uint32_t instruction = *reinterpret_cast<uint32_t *>(&mem[pc]);
         uint8_t op = Decoder::getOpcode(instruction);
         uint8_t funct3 = Decoder::getFunct3(instruction);
         uint8_t funct7 = Decoder::getFunct7(instruction);
@@ -243,59 +241,59 @@ int main(int argc, char** argv) {
 
         // beq
         if (op == 0b1100011 && funct3 == 0x0) {
+            LOG_INST(pc, "beq");
             if (reg[rs1] == reg[rs2]) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            LOG_INST(pc, "beq");
         }
         // bne
         if (op == 0b1100011 && funct3 == 0x1) {
+            LOG_INST(pc, "bne");
             if (reg[rs1] != reg[rs2]) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            LOG_INST(pc, "bne");
         }
         // blt
         if (op == 0b1100011 && funct3 == 0x4) {
+            LOG_INST(pc, "blt");
             if (static_cast<int32_t>(reg[rs1]) < static_cast<int32_t>(reg[rs2])) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            LOG_INST(pc, "blt");
         }
         // bge
         if (op == 0b1100011 && funct3 == 0x5) {
+            LOG_INST(pc, "bge");
             if (static_cast<int32_t>(reg[rs1]) >= static_cast<int32_t>(reg[rs2])) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            LOG_INST(pc, "bge");
         }
         // bltu
         if (op == 0b1100011 && funct3 == 0x6) {
+            LOG_INST(pc, "bltu");
             if (reg[rs1] < reg[rs2]) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            LOG_INST(pc, "bltu");
         }
         // bgeu
         if (op == 0b1100011 && funct3 == 0x7) {
+            LOG_INST(pc, "bgeu");
             if (reg[rs1] >= reg[rs2]) {
                 pc += Decoder::B_FMT_imm(instruction) - 4;
             }
-            LOG_INST(pc, "bgeu");
         }
 
         // jal
         if (op == 0b1101111) {
+            LOG_INST(pc, "jal");
             reg[rd] = pc + 4;
             pc += Decoder::J_FMT_imm(instruction) - 4;
-            LOG_INST(pc, "jal");
         }
         // jalr
         if (op == 0b1100111 && funct3 == 0x0) {
+            LOG_INST(pc, "jalr");
             reg[rd] = pc + 4;
 
             pc = Decoder::I_FMT_imm(instruction) + reg[rs1] - 4;
-            LOG_INST(pc, "jalr");
         }
 
         // lui
@@ -311,17 +309,20 @@ int main(int argc, char** argv) {
 
         // ecall
         if (op == 0b1110011 && Decoder::I_FMT_imm(instruction) == 0x0) {
+            LOG_INST(pc, "ecall");
             switch (reg[17]) {
                 case 64: // write
                     for (uint32_t i = 0; i < reg[12]; ++i) {
-                        std::cout << mem[reg[11] + i];
+                        char c = static_cast<char>(mem[reg[11] + i]);
+                        std::cout << c;
                     }
                     std::cout << std::flush;
                     break;
+                case 93: // exit
+                    return 0;
                 default:
                     std::cout << "Unknown ecall with code " << reg[17] << std::endl;
             }
-            LOG_INST(pc, "ecall");
         }
 
         // RV32M
