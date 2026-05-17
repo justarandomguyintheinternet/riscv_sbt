@@ -26,25 +26,30 @@ public:
 
     template<typename Container>
     void decodeToContainer(Container& container) const {
-        auto& section = getSection(ElfBinarySection::Text).value().get();
-        printf("Loading section %s\n", section.getName().c_str());
-        uint32_t addr = section.getStartAddress();
+        auto textSections = getTypeSections(ElfBinarySection::Text);
 
-        for (const auto word : section.getData()) {
-            Instruction inst = Decoder::decode(word, addr);
+        for (const auto& ref : textSections) {
+            const auto& textSection = ref.get();
 
-            if (inst.type == EInstruction::INVALID) {
-                printf("Invalid instruction at %p\n", reinterpret_cast<void *>(addr));
-            } else {
-                container.push_back(inst);
+            printf("Loading section %s\n", textSection.getName().c_str());
+            uint32_t addr = textSection.getStartAddress();
+
+            for (const auto word : textSection.getData()) {
+                Instruction inst = Decoder::decode(word, addr);
+
+                if (inst.type == EInstruction::INVALID) {
+                    printf("Invalid instruction at %p\n", reinterpret_cast<void *>(addr));
+                } else {
+                    container.push_back(inst);
+                }
+
+                addr += 4;
             }
-
-            addr += 4;
         }
     }
 
     const std::vector<ElfBinarySection>& getSections() const { return sections; }
-    std::vector<std::reference_wrapper<const ElfBinarySection>> getDataSections() const;
+    std::vector<std::reference_wrapper<const ElfBinarySection>> getTypeSections(ElfBinarySection::SectionType type) const;
     std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(ElfBinarySection::SectionType type) const;
     std::optional<uint32_t> getSymbolAddress(const char* symbolName) const;
     int32_t getEntryAddress() const;

@@ -19,12 +19,12 @@ public:
         uint32_t flags;
     };
 
-    static SectionType stringToType(const std::string& name);
-
-    ElfBinarySection(std::string name, uint64_t startAddress, std::vector<uint32_t> data, SegmentInfo segmentInfo);
+    SectionType resolveSectionType() const;
+    ElfBinarySection(std::string name, uint64_t startAddress, std::vector<uint32_t> data, SegmentInfo segmentInfo, uint64_t sectionFlags);
 
     std::string getName() const { return name; }
     uint32_t getStartAddress() const { return startAddress; }
+    uint32_t getLoadAddress() const { return segmentInfo.loadAddress + (getStartAddress() - segmentInfo.virtualAddress); } // calculate offset into the segment which is the same in virtual and physical address space
     const std::vector<uint32_t>& getData() const { return data; }
     SectionType getType() const { return type; }
     const SegmentInfo& getSegmentInfo() const { return segmentInfo; }
@@ -37,6 +37,7 @@ private:
     std::vector<uint32_t> data;
     SectionType type;
     SegmentInfo segmentInfo;
+    uint64_t sectionFlags;
 };
 
 #endif //RISCV_EMU_ELFBINARYSECTION_H

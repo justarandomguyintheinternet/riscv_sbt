@@ -189,7 +189,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             emit(std::format("reg[{}] = {};\n", instruction.rd, instruction.immediate << 12), instruction.rd);
             break;
         case EInstruction::AUIPC:
-            emit(std::format("reg[{}] = pc + 0x{:X};\n", instruction.rd, instruction.immediate << 12), instruction.rd);
+            emit(std::format("reg[{}] = 0x{:X} + 0x{:X};\n", instruction.rd, instruction.address, instruction.immediate << 12), instruction.rd);
             break;
         case EInstruction::ECALL:
             emit(MULTILINE(switch (reg[17]) {
@@ -199,6 +199,8 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
                     }
                     std::cout << std::flush;
                     break;
+                case 93: // exit
+                        return 0;
                 default:
                     std::cout << "Unknown ecall with code " << reg[17] << std::endl;
             }));
@@ -307,7 +309,15 @@ int main(int argc, char** argv) {
 
     binary.decodeToContainer(instructions);
     std::set<uint32_t> leaders = getBasicBlocksLeaders(instructions);
-    auto& text = binary.getSection(ElfBinarySection::Text).value().get();
+
+    auto text = binary.getTypeSections(ElfBinarySection::Text);
+    uint32_t textSize = 0; // Sum of the size of all sections which are executable
+    uint32_t textStartAddress = 1 << 31; // Lowest start address among executable sections
+
+    for (const auto& ref : text) {
+        textSize += ref.get().getSize();
+        textStartAddress = std::min(textStartAddress, ref.get().getStartAddress());
+    }
 
     output.open("./sbt/output/translated.cpp");
 
@@ -317,39 +327,45 @@ int main(int argc, char** argv) {
 
     emit(std::format("uint8_t mem[0x{:X}];\n", STACK_SIZE));
     emit("uint32_t reg[32];\n");
-    emit(std::format("uint32_t pc = 0x{:X};\n\n", binary.getSymbolAddress("main").value_or(0)));
-    emit(std::format("void* dispatch[{}] = {{0}};\n", text.getSize()));
+    emit(std::format("uint32_t pc = 0x{:X};\n\n", binary.getEntryAddress()));
+    emit(std::format("void* dispatch[{}] = {{0}};\n", textSize));
 
     emitInfoPrint();
 
     emit("\n\nint main() {\n");
-    emit(std::format("\treg[1] = 0x{:X};\n", BASE_RA));
-    emit(std::format("\treg[2] = 0x{:X};\n", STACK_SIZE));
-    emit(std::format("\treg[3] = 0x{:X};\n\n", binary.getSymbolAddress("__global_pointer$").value_or(0)));
+
+    bool hasStartup = binary.getSymbolAddress("_start").has_value();
+
+    if (!hasStartup) {
+        std::cout << "No _start symbol found, using default init" << std::endl;
+        emit(std::format("\treg[1] = 0x{:X};\n", BASE_RA));
+        emit(std::format("\treg[2] = 0x{:X};\n", STACK_SIZE));
+        emit(std::format("\treg[3] = 0x{:X};\n\n", binary.getSymbolAddress("__global_pointer$").value_or(0)));
+    }
 
     // build dispatch table https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
     for (const auto& inst : instructions) {
         if (leaders.contains(inst.address)) {
-            emit(std::format("\tdispatch[{}] = &&L{:X};\n", (inst.address - text.getStartAddress()) / 4, inst.address));
+            emit(std::format("\tdispatch[{}] = &&L{:X};\n", (inst.address - textStartAddress) / 4, inst.address));
         } else {
-            emit(std::format("\tdispatch[{}] = &&INVALID;\n", (inst.address - text.getStartAddress()) / 4));
+            emit(std::format("\tdispatch[{}] = &&INVALID;\n", (inst.address - textStartAddress) / 4));
         }
     }
 
     // load static data
-    for (const auto& ref : binary.getDataSections()) {
+    for (const auto& ref : binary.getTypeSections(ElfBinarySection::SectionType::Data)) {
         const auto& dataSection = ref.get();
-        uint32_t dataAddr = dataSection.getStartAddress();
+        uint32_t dataAddr = dataSection.getLoadAddress(); // Use load address, not virtual one, for when crt0 copies data into to the virtual address
 
         for (auto word : dataSection.getData()) {
-            emit(std::format("\t*reinterpret_cast<uint32_t *>(&mem[0x{:X}]) = 0x{:X};\n", dataAddr, word));
+            emit(std::format("\t*reinterpret_cast<uint32_t *>(&mem[0x{:X}]) = 0x{:X};\n", dataAddr, word), word != 0);
             dataAddr += 4;
         }
     }
 
     emit("\n\tuint32_t address;\n");
     emit("\n\twhile (true) {\n");
-    emit(std::format("\t\tuint32_t pcDispatchIndex = (pc - 0x{:X}) / 4;\n", text.getStartAddress()));
+    emit(std::format("\t\tuint32_t pcDispatchIndex = (pc - 0x{:X}) / 4;\n", textStartAddress));
     emit(std::format("\t\tif (pc == 0x{:X}) {{ printInfo(); return 0; }}\n", BASE_RA));
     emit("\t\tgoto *dispatch[pcDispatchIndex];\n\n");
 

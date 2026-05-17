@@ -159,7 +159,7 @@ void ElfBinary::decode() {
             }
         }
 
-        sections.emplace_back(std::string(name), sectionHeader.sh_addr, std::move(sectionData), segmentInfo);
+        sections.emplace_back(std::string(name), sectionHeader.sh_addr, std::move(sectionData), segmentInfo, sectionHeader.sh_flags);
     }
 }
 
@@ -173,22 +173,22 @@ std::optional<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getSect
     return std::nullopt;
 }
 
-std::vector<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getDataSections() const {
-    std::vector<std::reference_wrapper<const ElfBinarySection>> dataSections;
+std::vector<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getTypeSections(ElfBinarySection::SectionType type) const {
+    std::vector<std::reference_wrapper<const ElfBinarySection>> result;
 
     for (const auto& section : sections) {
-        if (section.getType() == ElfBinarySection::Data) {
-            dataSections.push_back(section);
+        if (section.getType() == type) {
+            result.push_back(section);
         }
     }
-    return dataSections;
+    return result;
 }
 
 void ElfBinary::loadToMemory(uint8_t* memory, uint32_t size) const {
     for (auto& section : getSections()) {
         printf("Loading section %s\n", section.getName().c_str());
         const auto& seg = section.getSegmentInfo();
-        uint32_t addr = seg.loadAddress + (section.getStartAddress() - seg.virtualAddress); // calculate offset into the segment which is the same in virtual and physical address space
+        uint32_t addr = section.getLoadAddress();
 
         if (addr + section.getSize() * 4 > size) {
             printf("Section %s exceeds memory size\n", section.getName().c_str());
