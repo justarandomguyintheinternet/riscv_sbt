@@ -22,7 +22,8 @@ int _write(int fd, const void* buf, int count) {
 static int _putc(char c, FILE *file)
 {
     (void) file;
-    _write(1, &c, 1);
+    volatile char buf = c; // Force compiler to emit store instruction for this, as it otherwise might just not store it to the stack cuz it cant see it being read by anything (its read by ecall)
+    _write(1, (void*)&buf, 1);
     return c;
 }
 

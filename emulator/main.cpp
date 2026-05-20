@@ -319,6 +319,7 @@ int main(int argc, char** argv) {
                     std::cout << std::flush;
                     break;
                 case 93: // exit
+                    printInfo();
                     return 0;
                 default:
                     std::cout << "Unknown ecall with code " << reg[17] << std::endl;

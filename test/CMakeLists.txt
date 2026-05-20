@@ -1,5 +1,5 @@
 set(RISCV_CC riscv64-unknown-elf-gcc)
-set(RISCV_FLAGS -march=rv32im -mabi=ilp32 -O1 --specs=picolibc.specs -T ${CMAKE_CURRENT_SOURCE_DIR}/picostdlib.ld --crt0=hosted)
+set(RISCV_FLAGS -march=rv32im -mabi=ilp32 -O3 --specs=picolibc.specs -T ${CMAKE_CURRENT_SOURCE_DIR}/picostdlib.ld --crt0=hosted)
 set(ELF_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 # https://gcc.gnu.org/onlinedocs/gcc/Picolibc-Options.html
 
