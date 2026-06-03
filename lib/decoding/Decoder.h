@@ -14,6 +14,13 @@ struct Instruction {
     uint8_t rd;
 };
 
+enum InstructionField {
+    RS1,
+    RS2,
+    RD,
+    IMMEDIATE
+};
+
 namespace Decoder {
     // Extract minor opcode, 3 bit
     uint8_t getFunct3(uint32_t instruction);

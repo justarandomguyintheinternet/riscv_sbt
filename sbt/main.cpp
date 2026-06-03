@@ -6,12 +6,42 @@
 #include <set>
 
 std::vector<Instruction> instructions;
+const Instruction* current;
 uint8_t indent = 0;
 std::ofstream output;
 
 #define BASE_RA 0xdeadbeef
 #define MEM_SIZE 0x80000
 #define MULTILINE(...) #__VA_ARGS__
+
+std::string REG(InstructionField field) {
+    if (current == nullptr) {
+        return "0";
+    }
+
+    uint8_t index = 0;
+
+    switch (field) {
+        case InstructionField::RS1:
+            index = current->rs1;
+            break;
+        case InstructionField::RS2:
+            index = current->rs2;
+            break;
+        case InstructionField::RD:
+            index = current->rd;
+            break;
+        case InstructionField::IMMEDIATE:
+            index = current->immediate;
+            break;
+    }
+
+    if (index == 0) {
+        return "0"; // In case of assignment to 0, emit will just skip this instruction anyways
+    } else {
+        return std::format("reg[{}]", index);
+    }
+}
 
 void emit(std::string_view text) {
     for (size_t i = 0; i < indent; ++i) {
@@ -51,7 +81,7 @@ void emitInfoPrint() {
 }
 
 void emitLoadSaveAddress(const Instruction& instruction) {
-    emit(std::format("address = reg[{}] + {};\n", instruction.rs1, instruction.immediate));
+    emit(std::format("address = {} + {};\n", REG(RS1), instruction.immediate));
 }
 
 void emitInstruction(const Instruction& instruction, bool isLeader) {
@@ -61,136 +91,138 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
     }
     indent = 3;
 
+    current = &instruction;
+
     switch (instruction.type) {
         case EInstruction::ADD:
-            emit(std::format("reg[{}] = reg[{}] + reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = {} + {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::SUB:
-            emit(std::format("reg[{}] = reg[{}] - reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = {} - {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::XOR:
-            emit(std::format("reg[{}] = reg[{}] ^ reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = {} ^ {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::OR:
-            emit(std::format("reg[{}] = reg[{}] | reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = {} | {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::AND:
-            emit(std::format("reg[{}] = reg[{}] & reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = {} & {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::SLL:
-            emit(std::format("reg[{}] = reg[{}] << (reg[{}] & 0x1f);\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = {} << ({} & 0x1f);\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::SRL:
-            emit(std::format("reg[{}] = reg[{}] >> (reg[{}] & 0x1f);\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = {} >> ({} & 0x1f);\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::SRA:
-            emit(std::format("reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(reg[{}]) >> reg[{}] & 0x1f);\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = static_cast<uint32_t>(static_cast<int32_t>({}) >> {} & 0x1f);\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::SLT:
-            emit(std::format("reg[{}] = static_cast<int32_t>(reg[{}]) < static_cast<int32_t>(reg[{}]);\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = static_cast<int32_t>({}) < static_cast<int32_t>({});\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::SLTU:
-            emit(std::format("reg[{}] = reg[{}] < reg[{}];\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = {} < {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::ADDI:
-            emit(std::format("reg[{}] = reg[{}] + {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            emit(std::format("{} = {} + {};\n", REG(RD), REG(RS1), instruction.immediate), instruction.rd);
             break;
         case EInstruction::XORI:
-            emit(std::format("reg[{}] = reg[{}] ^ {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            emit(std::format("{} = {} ^ {};\n", REG(RD), REG(RS1), instruction.immediate), instruction.rd);
             break;
         case EInstruction::ORI:
-            emit(std::format("reg[{}] = reg[{}] | {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            emit(std::format("{} = {} | {};\n", REG(RD), REG(RS1), instruction.immediate), instruction.rd);
             break;
         case EInstruction::ANDI:
-            emit(std::format("reg[{}] = reg[{}] & {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            emit(std::format("{} = {} & {};\n", REG(RD), REG(RS1), instruction.immediate), instruction.rd);
             break;
         case EInstruction::SLLI:
-            emit(std::format("reg[{}] = reg[{}] << {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            emit(std::format("{} = {} << {};\n", REG(RD), REG(RS1), instruction.rs2), instruction.rd);
             break;
         case EInstruction::SRLI:
-            emit(std::format("reg[{}] = reg[{}] >> {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            emit(std::format("{} = {} >> {};\n", REG(RD), REG(RS1), instruction.rs2), instruction.rd);
             break;
         case EInstruction::SRAI:
-            emit(std::format("reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(reg[{}]) >> {});\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd); // rs2 is same as shift amount
+            emit(std::format("{} = static_cast<uint32_t>(static_cast<int32_t>({}) >> {});\n", REG(RD), REG(RS1), instruction.rs2), instruction.rd); // rs2 is same as shift amount
             break;
         case EInstruction::SLTI:
-            emit(std::format("reg[{}] = static_cast<int32_t>(reg[{}]) < {};\n", instruction.rd, instruction.rs1, instruction.immediate), instruction.rd);
+            emit(std::format("{} = static_cast<int32_t>({}) < {};\n", REG(RD), REG(RS1), instruction.immediate), instruction.rd);
             break;
         case EInstruction::SLTIU:
-            emit(std::format("reg[{}] = reg[{}] < {};\n", instruction.rd, instruction.rs1, static_cast<uint32_t>(instruction.immediate)), instruction.rd);
+            emit(std::format("{} = {} < {};\n", REG(RD), REG(RS1), static_cast<uint32_t>(instruction.immediate)), instruction.rd);
             break;
         // todo: move memory functions to generic function
         case EInstruction::LB:
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[{}] = static_cast<int32_t>(static_cast<int8_t>(mem[address]));\n", instruction.rd), instruction.rd);
+            emit(std::format("{} = static_cast<int32_t>(static_cast<int8_t>(mem[address]));\n", REG(RD)), instruction.rd);
             break;
         case EInstruction::LH: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[{}] = static_cast<int32_t>(*reinterpret_cast<int16_t *>(&mem[address]));\n", instruction.rd), instruction.rd);
+            emit(std::format("{} = static_cast<int32_t>(*reinterpret_cast<int16_t *>(&mem[address]));\n", REG(RD)), instruction.rd);
             break;
         }
         case EInstruction::LW: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[{}] = *reinterpret_cast<uint32_t *>(&mem[address]);\n", instruction.rd), instruction.rd);
+            emit(std::format("{} = *reinterpret_cast<uint32_t *>(&mem[address]);\n", REG(RD)), instruction.rd);
             break;
         }
         case EInstruction::LBU: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[{}] = mem[address];\n", instruction.rd), instruction.rd);
+            emit(std::format("{} = mem[address];\n", REG(RD)), instruction.rd);
             break;
         }
         case EInstruction::LHU: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("reg[{}] = *reinterpret_cast<uint16_t *>(&mem[address]);\n", instruction.rd), instruction.rd);
+            emit(std::format("{} = *reinterpret_cast<uint16_t *>(&mem[address]);\n", REG(RD)), instruction.rd);
             break;
         }
         case EInstruction::SB: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("mem[address] = static_cast<uint8_t>(reg[{}]);\n", instruction.rs2));
+            emit(std::format("mem[address] = static_cast<uint8_t>({});\n", REG(RS2)));
             break;
         }
         case EInstruction::SH: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("*reinterpret_cast<uint16_t *>(&mem[address]) = static_cast<uint16_t>(reg[{}]);\n", instruction.rs2));
+            emit(std::format("*reinterpret_cast<uint16_t *>(&mem[address]) = static_cast<uint16_t>({});\n", REG(RS2)));
             break;
         }
         case EInstruction::SW: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("*reinterpret_cast<uint32_t *>(&mem[address]) = reg[{}];\n", instruction.rs2));
+            emit(std::format("*reinterpret_cast<uint32_t *>(&mem[address]) = {};\n", REG(RS2)));
             break;
         }
         case EInstruction::BEQ:
-            emit(std::format("if (reg[{}] == reg[{}]) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            emit(std::format("if ({} == {}) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
             break;
         case EInstruction::BNE:
-            emit(std::format("if (reg[{}] != reg[{}]) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            emit(std::format("if ({} != {}) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
             break;
         case EInstruction::BLT:
-            emit(std::format("if (static_cast<int32_t>(reg[{}]) < static_cast<int32_t>(reg[{}])) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            emit(std::format("if (static_cast<int32_t>({}) < static_cast<int32_t>({})) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
             break;
         case EInstruction::BGE:
-            emit(std::format("if (static_cast<int32_t>(reg[{}]) >= static_cast<int32_t>(reg[{}])) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            emit(std::format("if (static_cast<int32_t>({}) >= static_cast<int32_t>({})) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
             break;
         case EInstruction::BLTU:
-            emit(std::format("if (reg[{}] < reg[{}]) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            emit(std::format("if ({} < {}) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
             break;
         case EInstruction::BGEU:
-            emit(std::format("if (reg[{}] >= reg[{}]) goto L{:X};\n", instruction.rs1, instruction.rs2, instruction.address + instruction.immediate));
+            emit(std::format("if ({} >= {}) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
             break;
         case EInstruction::JAL:
-            emit(std::format("reg[{}] = 0x{:X};\n", instruction.rd, instruction.address + 4), instruction.rd);
+            emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
             emit(std::format("goto L{:X};\n", instruction.address + instruction.immediate));
             break;
         case EInstruction::JALR:
-            emit(std::format("reg[{}] = 0x{:X};\n", instruction.rd, instruction.address + 4), instruction.rd);
-            emit(std::format("pc = {} + reg[{}];\n", instruction.immediate, instruction.rs1));
+            emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
+            emit(std::format("pc = {} + {};\n", instruction.immediate, REG(RS1)));
             emit("continue;\n");
             break;
         case EInstruction::LUI:
-            emit(std::format("reg[{}] = {};\n", instruction.rd, instruction.immediate << 12), instruction.rd);
+            emit(std::format("{} = {};\n", REG(RD), instruction.immediate << 12), instruction.rd);
             break;
         case EInstruction::AUIPC:
-            emit(std::format("reg[{}] = 0x{:X} + 0x{:X};\n", instruction.rd, instruction.address, instruction.immediate << 12), instruction.rd);
+            emit(std::format("{} = 0x{:X} + 0x{:X};\n", REG(RD), instruction.address, instruction.immediate << 12), instruction.rd);
             break;
         case EInstruction::ECALL:
             // todo: statically figure out reg[17] whenever possible, then emit correct syscall handler
@@ -213,61 +245,63 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             break;
         // RV32-M
         case EInstruction::MUL:
-            emit(std::format("reg[{}] = static_cast<uint64_t>(reg[{}]) * static_cast<uint64_t>(reg[{}]) & 0xFFFFFFFF;\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = static_cast<uint64_t>({}) * static_cast<uint64_t>({}) & 0xFFFFFFFF;\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::MULH:
-            emit(std::format("reg[{}] = (static_cast<int64_t>(static_cast<int32_t>(reg[{}])) * static_cast<int64_t>(static_cast<int32_t>(reg[{}]))) >> 32;\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = (static_cast<int64_t>(static_cast<int32_t>({})) * static_cast<int64_t>(static_cast<int32_t>({}))) >> 32;\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::MULHSU:
-            emit(std::format("reg[{}] = (static_cast<int64_t>(static_cast<int32_t>(reg[{}])) * static_cast<uint64_t>(reg[{}])) >> 32;\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = (static_cast<int64_t>(static_cast<int32_t>({})) * static_cast<uint64_t>({})) >> 32;\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::MULHU:
-            emit(std::format("reg[{}] = (static_cast<uint64_t>(reg[{}]) * static_cast<uint64_t>(reg[{}])) >> 32;\n", instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            emit(std::format("{} = (static_cast<uint64_t>({}) * static_cast<uint64_t>({})) >> 32;\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::DIV:
             emit(std::format(R"(
-                if (reg[{}] == 0) {{
-                    reg[{}] = -1;
-                }} else if (reg[{}] == 0x80000000 && reg[{}] == 0xFFFFFFFF) {{
-                    reg[{}] = 0x80000000;
+                if ({} == 0) {{
+                    {} = -1;
+                }} else if ({} == 0x80000000 && {} == 0xFFFFFFFF) {{
+                    {} = 0x80000000;
                 }} else {{
-                    reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(reg[{}]) / static_cast<int32_t>(reg[{}]));
+                    {} = static_cast<uint32_t>(static_cast<int32_t>({}) / static_cast<int32_t>({}));
                 }}
-            )", instruction.rs2, instruction.rd, instruction.rs1, instruction.rs2, instruction.rd, instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            )", REG(RS2), REG(RD), REG(RS1), REG(RS2), REG(RD), REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::DIVU:
             emit(std::format(R"(
-                if (reg[{}] == 0) {{
-                    reg[{}] = 0xFFFFFFFF;
+                if ({} == 0) {{
+                    {} = 0xFFFFFFFF;
                 }} else {{
-                    reg[{}] = reg[{}] / reg[{}];
+                    {} = {} / {};
                 }}
-            )", instruction.rs2, instruction.rd, instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            )", REG(RS2), REG(RD), REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::REM:
             emit(std::format(R"(
-                if (reg[{}] == 0) {{
-                    reg[{}] = reg[{}];
-                }} else if (reg[{}] == 0x80000000 && reg[{}] == 0xFFFFFFFF) {{
-                    reg[{}] = 0x80000000;
+                if ({} == 0) {{
+                    {} = {};
+                }} else if ({} == 0x80000000 && {} == 0xFFFFFFFF) {{
+                    {} = 0x80000000;
                 }} else {{
-                    reg[{}] = static_cast<uint32_t>(static_cast<int32_t>(reg[{}]) % static_cast<int32_t>(reg[{}]));
+                    {} = static_cast<uint32_t>(static_cast<int32_t>({}) % static_cast<int32_t>({}));
                 }}
-            )", instruction.rs2, instruction.rd, instruction.rs1, instruction.rs1, instruction.rs2, instruction.rd, instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            )", REG(RS2), REG(RD), REG(RS1), REG(RS1), REG(RS2), REG(RD), REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::REMU:
             emit(std::format(R"(
-                if (reg[{}] == 0) {{
-                    reg[{}] = reg[{}];
+                if ({} == 0) {{
+                    {} = {};
                 }} else {{
-                    reg[{}] = reg[{}] % reg[{}];
+                    {} = {} % {};
                 }}
-            )", instruction.rs2, instruction.rd, instruction.rs1, instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
+            )", REG(RS2), REG(RD), REG(RS1), REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::INVALID:
             emit(std::format("// Invalid instruction at 0x{:X}=0x{:X}\n", instruction.address, instruction.instruction));
             break;
     }
+
+    current = nullptr;
 }
 
 std::set<uint32_t> getBasicBlocksLeaders(const std::vector<Instruction>& instructions) {
