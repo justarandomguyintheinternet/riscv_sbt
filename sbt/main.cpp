@@ -10,7 +10,7 @@ uint8_t indent = 0;
 std::ofstream output;
 
 #define BASE_RA 0xdeadbeef
-#define STACK_SIZE 0x80000
+#define MEM_SIZE 0x80000
 #define MULTILINE(...) #__VA_ARGS__
 
 void emit(std::string_view text) {
@@ -119,6 +119,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
         case EInstruction::SLTIU:
             emit(std::format("reg[{}] = reg[{}] < {};\n", instruction.rd, instruction.rs1, static_cast<uint32_t>(instruction.immediate)), instruction.rd);
             break;
+        // todo: move memory functions to generic function
         case EInstruction::LB:
             emitLoadSaveAddress(instruction);
             emit(std::format("reg[{}] = static_cast<int32_t>(static_cast<int8_t>(mem[address]));\n", instruction.rd), instruction.rd);
@@ -192,6 +193,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             emit(std::format("reg[{}] = 0x{:X} + 0x{:X};\n", instruction.rd, instruction.address, instruction.immediate << 12), instruction.rd);
             break;
         case EInstruction::ECALL:
+            // todo: statically figure out reg[17] whenever possible, then emit correct syscall handler
             emit(MULTILINE(switch (reg[17]) {
                 case 64: // write
                     for (uint32_t i = 0; i < reg[12]; ++i) {
@@ -263,7 +265,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             )", instruction.rs2, instruction.rd, instruction.rs1, instruction.rd, instruction.rs1, instruction.rs2), instruction.rd);
             break;
         case EInstruction::INVALID:
-            emit(std::format("// Invalid instruction at 0x{:X}\n", instruction.address));
+            emit(std::format("// Invalid instruction at 0x{:X}=0x{:X}\n", instruction.address, instruction.instruction));
             break;
     }
 }
@@ -312,7 +314,7 @@ int main(int argc, char** argv) {
 
     auto text = binary.getTypeSections(ElfBinarySection::Text);
     uint32_t textSize = 0; // Sum of the size of all sections which are executable
-    uint32_t textStartAddress = 1 << 31; // Lowest start address among executable sections
+    uint32_t textStartAddress = 1 << 31; // Lowest start address among executable sections, used for calculating zero based pc (To make dispatch array more compact)
 
     for (const auto& ref : text) {
         textSize += ref.get().getSize();
@@ -325,8 +327,8 @@ int main(int argc, char** argv) {
     emit("#include <cstdint>\n");
     emit("#include <iomanip>\n\n");
 
-    emit(std::format("uint8_t mem[0x{:X}];\n", STACK_SIZE));
-    emit("uint32_t reg[32];\n");
+    emit(std::format("uint8_t mem[0x{:X}];\n", MEM_SIZE)); // todo: actual memory managment logic
+    emit("uint32_t reg[32];\n"); // todo: register allocation things
     emit(std::format("uint32_t pc = 0x{:X};\n\n", binary.getEntryAddress()));
     emit(std::format("void* dispatch[{}] = {{0}};\n", textSize));
 
@@ -334,12 +336,13 @@ int main(int argc, char** argv) {
 
     emit("\n\nint main() {\n");
 
+    // not present for binaries compiled for baremetal, without picolibc
     bool hasStartup = binary.getSymbolAddress("_start").has_value();
 
     if (!hasStartup) {
         std::cout << "No _start symbol found, using default init" << std::endl;
         emit(std::format("\treg[1] = 0x{:X};\n", BASE_RA));
-        emit(std::format("\treg[2] = 0x{:X};\n", STACK_SIZE));
+        emit(std::format("\treg[2] = 0x{:X};\n", MEM_SIZE));
         emit(std::format("\treg[3] = 0x{:X};\n\n", binary.getSymbolAddress("__global_pointer$").value_or(0)));
     }
 
@@ -366,7 +369,7 @@ int main(int argc, char** argv) {
     emit("\n\tuint32_t address;\n");
     emit("\n\twhile (true) {\n");
     emit(std::format("\t\tuint32_t pcDispatchIndex = (pc - 0x{:X}) / 4;\n", textStartAddress));
-    emit(std::format("\t\tif (pc == 0x{:X}) {{ printInfo(); return 0; }}\n", BASE_RA));
+    emit(std::format("\t\tif (pc == 0x{:X}) {{ printInfo(); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
     emit("\t\tgoto *dispatch[pcDispatchIndex];\n\n");
 
     for (const auto& inst : instructions) {

@@ -38,7 +38,7 @@ public:
                 Instruction inst = Decoder::decode(word, addr);
 
                 if (inst.type == EInstruction::INVALID) {
-                    printf("Invalid instruction at %p\n", reinterpret_cast<void *>(addr));
+                    printf("Invalid instruction at %p=%p\n", reinterpret_cast<void *>(addr), reinterpret_cast<void *>(word));
                 } else {
                     container.push_back(inst);
                 }

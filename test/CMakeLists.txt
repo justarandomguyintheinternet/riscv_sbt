@@ -1,3 +1,5 @@
+# Currently uses baremetal compiler with picolibc, easiest way of having basic stdio support without having to worry about all the other syscalls that e.g. musl libc utilizes in its startup code.
+
 set(RISCV_CC riscv64-unknown-elf-gcc)
 set(RISCV_FLAGS -march=rv32im -mabi=ilp32 -O3 --specs=picolibc.specs -T ${CMAKE_CURRENT_SOURCE_DIR}/picostdlib.ld --crt0=hosted)
 set(ELF_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bin)

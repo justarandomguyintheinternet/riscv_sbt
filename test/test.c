@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 int main() {
-	printf("nice!\nhello world...\n");
+	float x = 3.141;
+	printf("nice!\nhello world...x=%.2f\n", x);
 	return 0xa4;
 }

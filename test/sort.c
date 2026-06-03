@@ -1,59 +1,23 @@
-#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-#define SIZE 8
-uint32_t values[8] = {
-    34,
-    12,
-    78,
-    1,
-    983,
-    55,
-    22,
-    5
-};
-
-void sortAscending() {
-    uint32_t temp;
-
-    for (int i = 0; i < SIZE; ++i) {
-        for (int j = 0; j < SIZE; ++j) {
-            if (values[i] < values[j]) {
-                temp = values[j];
-                values[j] = values[i];
-                values[i] = temp;
-            }
-        }
-    }
-};
-
-void sortDescending() {
-    uint32_t temp;
-
-    for (int i = 0; i < SIZE; ++i) {
-        for (int j = 0; j < SIZE; ++j) {
-            if (values[i] > values[j]) {
-                temp = values[j];
-                values[j] = values[i];
-                values[i] = temp;
-            }
-        }
-    }
-};
-
-void (*modes[2])() = {
-    sortAscending,
-    sortDescending
-};
+// Comparison function
+int compare(const void* a, const void* b) {
+    return (*(int*)a - *(int*)b);
+}
 
 int main() {
-    for (int i = 0; i < 2; ++i) {
-        modes[i]();
+    int arr[] = {10, 5, 4, 6, 9};
+    int n = sizeof(arr) / sizeof(arr[0]);
 
-        for (int j = 0; j < SIZE; ++j) {
-            printf("%d\n", values[j]);
-        }
+    qsort(arr, n, sizeof(int), compare);
+
+    printf("Following is the sorted array: ");
+
+    int i;
+    for (i = 0; i < n; ++i) {
+        printf("%d ", arr[i]);
     }
-
+    printf("\n");
     return 0;
 }

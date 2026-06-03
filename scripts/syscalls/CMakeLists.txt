@@ -1,0 +1,2 @@
+add_executable(list_syscalls list_syscalls.cpp)
+target_link_libraries(list_syscalls PRIVATE riscv_lib)
