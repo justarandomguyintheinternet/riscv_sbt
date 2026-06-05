@@ -2,6 +2,7 @@ add_library(riscv_lib
         elf/ElfBinary.cpp
         elf/ElfBinarySection.cpp
         decoding/Decoder.cpp
+        runtime/registers.h
 )
 
 target_link_libraries(riscv_lib elf)

@@ -1,14 +1,19 @@
-#include "../lib/elf/ElfBinary.h"
+#include "elf/ElfBinary.h"
 #include <iostream>
 #include <fstream>
 #include <bitset>
 #include <format>
 #include <set>
 
+#include "runtime/registers.h"
+
 std::vector<Instruction> instructions;
 const Instruction* current;
 uint8_t indent = 0;
 std::ofstream output;
+
+uint32_t reg_values[32];
+bool reg_known[32];
 
 #define BASE_RA 0xdeadbeef
 #define MEM_SIZE 0x80000
@@ -50,11 +55,13 @@ void emit(std::string_view text) {
     output << text;
 }
 
-// Useful for e.g. omitting instructions that write to x0
-void emit(std::string_view text, uint8_t condition) {
-    if (condition > 0) {
+// Helper to skip instructions writing to x0
+void emit(std::string_view text, uint8_t rd) {
+    if (rd > 0) {
         emit(text);
     }
+
+    reg_known[rd] = false;
 }
 
 void emitInfoPrint() {
@@ -84,10 +91,39 @@ void emitLoadSaveAddress(const Instruction& instruction) {
     emit(std::format("address = {} + {};\n", REG(RS1), instruction.immediate));
 }
 
+// https://github.com/libriscv/libriscv/blob/master/lib/libriscv/tr_emit.cpp#L243-L254
+void emitOp(std::string_view op, std::string_view shortOp, bool ordered) {
+    if (current == nullptr) {
+        return;
+    }
+
+    if (current->rd == current->rs1) {
+        emit(std::format("{} {} {};\n", REG(RD), shortOp, REG(RS2)), current->rd);
+    } else if (current->rd == current->rs2 && !ordered) {
+        emit(std::format("{} {} {};\n", REG(RD), shortOp, REG(RS1)), current->rd);
+    } else if (current->rd == current->rs2 && current->rs1 == 0) { // 0 - rs2
+        emit(std::format("{} = {} {};\n", REG(RD), op, REG(RS2)), current->rd);
+    } else {
+        emit(std::format("{} = {} {} {};\n", REG(RD), REG(RS1), op, REG(RS2)), current->rd);
+    }
+}
+
+void track(uint8_t reg, uint32_t value) {
+    reg_values[reg] = value;
+    reg_known[reg] = true;
+}
+
+void resetTracked() {
+    for (bool& i : reg_known) {
+        i = false;
+    }
+}
+
 void emitInstruction(const Instruction& instruction, bool isLeader) {
     indent = 2;
     if (isLeader) {
         emit(std::format("L{:X}:\n", instruction.address));
+        resetTracked();
     }
     indent = 3;
 
@@ -95,19 +131,19 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
 
     switch (instruction.type) {
         case EInstruction::ADD:
-            emit(std::format("{} = {} + {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
+            emitOp("+", "+=", false);
             break;
         case EInstruction::SUB:
-            emit(std::format("{} = {} - {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
+            emitOp("-", "-=", true);
             break;
         case EInstruction::XOR:
-            emit(std::format("{} = {} ^ {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
+            emitOp("^", "^=", false);
             break;
         case EInstruction::OR:
-            emit(std::format("{} = {} | {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
+            emitOp("|", "|=", false);
             break;
         case EInstruction::AND:
-            emit(std::format("{} = {} & {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
+            emitOp("&", "&=", false);
             break;
         case EInstruction::SLL:
             emit(std::format("{} = {} << ({} & 0x1f);\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
@@ -125,7 +161,24 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             emit(std::format("{} = {} < {};\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::ADDI:
-            emit(std::format("{} = {} + {};\n", REG(RD), REG(RS1), instruction.immediate), instruction.rd);
+            if (instruction.immediate == 0) {
+                emit(std::format("{} = {};\n", REG(RD), REG(RS1)), instruction.rd);
+            } else if (instruction.rs1 == 0) {
+                emit(std::format("{} = {};\n", REG(RD), instruction.immediate), instruction.rd);
+                track(instruction.rd, instruction.immediate);
+            } else if (instruction.immediate < 0) { // Replace negative addition with subtract, condense same register operation to op assignment
+                if (instruction.rs1 == instruction.rd) {
+                    emit(std::format("{} -= {};\n", REG(RD), -instruction.immediate), instruction.rd);
+                } else {
+                    emit(std::format("{} = {} - {};\n", REG(RD), REG(RS1), -instruction.immediate), instruction.rd);
+                }
+            } else {
+                if (instruction.rs1 == instruction.rd) {
+                    emit(std::format("{} += {};\n", REG(RD), instruction.immediate), instruction.rd);
+                } else {
+                    emit(std::format("{} = {} + {};\n", REG(RD), REG(RS1), instruction.immediate), instruction.rd);
+                }
+            }
             break;
         case EInstruction::XORI:
             emit(std::format("{} = {} ^ {};\n", REG(RD), REG(RS1), instruction.immediate), instruction.rd);
@@ -225,22 +278,22 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             emit(std::format("{} = 0x{:X} + 0x{:X};\n", REG(RD), instruction.address, instruction.immediate << 12), instruction.rd);
             break;
         case EInstruction::ECALL:
-            // todo: statically figure out reg[17] whenever possible, then emit correct syscall handler
-            emit(MULTILINE(switch (reg[17]) {
-                case 64: // write
-                    for (uint32_t i = 0; i < reg[12]; ++i) {
-                        std::cout << (char)mem[reg[11] + i];
-                    }
-                    std::cout << std::flush;
-                    break;
-                case 93: // exit
-                        return 0;
-                default:
-                    std::cout << "Unknown ecall with code " << reg[17] << std::endl;
-            }));
+            if (!reg_known[a7]) {
+                printf("a7 not tracked, skipping at 0x%x\n", instruction.address); //todo: format this stuff out, emit switch as fallback
+            } else {
+                switch (reg_values[a7]) {
+                    case 64: // write
+                        emit("write(0, (const void*)((mem + reg[11])), reg[12]);\n");
+                        break;
+                    case 93: // exit
+                        emit("exit(reg[a0]);\n");
+                        break;
+                    default:
+                        printf("Unsupported syscall number: %d\n", reg_values[a7]);
+                }
+            }
             break;
         case EInstruction::EBREAK:
-            break;
         case EInstruction::FENCE:
             break;
         // RV32-M
@@ -328,13 +381,13 @@ std::set<uint32_t> getBasicBlocksLeaders(const std::vector<Instruction>& instruc
     return leaders;
 }
 
-// todo: make reg[0] read just const 0
-
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " <elf binary>" << std::endl;
         return 1;
     }
+
+    resetTracked();
 
     ElfBinary binary(argv[1]);
 
@@ -355,11 +408,13 @@ int main(int argc, char** argv) {
         textStartAddress = std::min(textStartAddress, ref.get().getStartAddress());
     }
 
-    output.open("./sbt/output/translated.cpp");
+    output.open("./sbt/translated/src.cpp");
 
     emit("#include <iostream>\n");
     emit("#include <cstdint>\n");
     emit("#include <iomanip>\n\n");
+    emit("#include <unistd.h>\n\n");
+    emit("#include <runtime/registers.h>\n\n");
 
     emit(std::format("uint8_t mem[0x{:X}];\n", MEM_SIZE)); // todo: actual memory managment logic
     emit("uint32_t reg[32];\n"); // todo: register allocation things
