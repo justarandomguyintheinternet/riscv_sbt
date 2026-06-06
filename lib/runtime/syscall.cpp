@@ -19,7 +19,16 @@ void Syscall::handle(Context& ctx, uint32_t num) {
             _writev(ctx);
             break;
         }
+        case 214: {
+            // brk
+            break;
+        }
+        case 222: {
+            // mmap
+            break;
+        }
         default:
             std::cout << "Unknown ecall with code " << num << std::endl;
+            ctx.reg[a0] = -1;
     }
 }

@@ -1,3 +1,4 @@
+#include <cstring>
 #include <iostream>
 #include <iomanip>
 
@@ -42,6 +43,7 @@ int main(int argc, char** argv) {
     }
 
     binary.loadToMemory(memory.getMemory(), memory.getSize());
+    strcpy(argv[0], argv[1]); // some programs like busybox check their own name and might not work correctly otherwise
     memory.loadAux(Auxiliary{ .argc = argc, .argv = argv }, true);
 
     Context ctx(memory);

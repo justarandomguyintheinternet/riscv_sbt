@@ -17,7 +17,7 @@ namespace Syscall {
     };
 
     inline void _write(Context& ctx) {
-        write(static_cast<uint8_t>(ctx.reg[a0]), ctx.memory.getHostAddress(ctx.reg[a1]), ctx.reg[a2]);
+        ctx.reg[a0] = write(static_cast<uint8_t>(ctx.reg[a0]), ctx.memory.getHostAddress(ctx.reg[a1]), ctx.reg[a2]);
     }
 
     inline void _writev(Context& ctx) {
