@@ -342,7 +342,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             )", REG(RS2), REG(RD), REG(RS1), REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::INVALID:
-            emit(std::format("// Invalid instruction at 0x{:X}=0x{:X}\n", instruction.address, instruction.instruction));
+            emit(std::format("printf(\"Unsupported instruction at 0x{:X}\");\n", instruction.address));
             break;
     }
 
