@@ -1,12 +1,18 @@
 #include <iostream>
 #include <bitset>
 #include <iomanip>
+#include <unistd.h>
+
 #include "elf/ElfBinary.h"
 #include "decoding/Decoder.h"
+#include "runtime/Memory.h"
+#include "runtime/syscall.h"
+#include <sys/uio.h>
 
 #define BASE_RA 0xdeadbeef
 #define LOG_INSTRUCTIONS 0
-#define SIZE_MEM 0x80000
+
+Memory memory;
 
 #if LOG_INSTRUCTIONS == 1
     #define LOG_INST(addr, name) logInstruction(addr, name)
@@ -14,14 +20,10 @@
     #define LOG_INST(addr, name)
 #endif
 
-uint8_t mem[SIZE_MEM];
-uint32_t reg[32] = { 0 };
-uint32_t pc = 0;
-
-void printInfo() {
+void printInfo(Context& ctx) {
     bool hasRegOutput = false;
     for (int i = 0; i < 32; ++i) {
-        if (reg[i] != 0) {
+        if (ctx.reg[i] != 0) {
             if (!hasRegOutput) {
                 std::cout << "\nRegisters:\n";
                 std::cout << "  idx   hex         signed\n";
@@ -29,23 +31,8 @@ void printInfo() {
             }
 
             std::cout << "  x" << std::dec << std::setw(2) << std::setfill('0') << i
-                      << "   0x" << std::hex << std::setw(8) << std::setfill('0') << reg[i]
-                      << "  " << std::dec << static_cast<int32_t>(reg[i]) << '\n';
-        }
-    }
-
-    bool hasMemOutput = false;
-    for (int i = 0; i < 32; ++i) {
-        if (mem[i] != 0) {
-            if (!hasMemOutput) {
-                std::cout << "\nMemory:\n";
-                std::cout << "  addr    hex   signed\n";
-                hasMemOutput = true;
-            }
-
-            std::cout << "  0x" << std::hex << std::setw(4) << std::setfill('0') << i
-                      << "   0x" << std::setw(2) << static_cast<unsigned>(mem[i])
-                      << "   " << std::dec << static_cast<int>(static_cast<int8_t>(mem[i])) << '\n';
+                      << "   0x" << std::hex << std::setw(8) << std::setfill('0') << ctx.reg[i]
+                      << "  " << std::dec << static_cast<int32_t>(ctx.reg[i]) << '\n';
         }
     }
 
@@ -69,21 +56,26 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    binary.loadToMemory(mem, SIZE_MEM);
-    pc = binary.getEntryAddress();
-    bool hasStartup = binary.getSymbolAddress("_start").has_value();
+    binary.loadToMemory(memory.getMemory(), memory.getSize());
 
-    if (!hasStartup) {
+    Context ctx(memory);
+    ctx.pc = binary.getEntryAddress();
+    ctx.reg[2] = memory.getStackPointer();
+
+    // temp until instruction emulation is moved to reusable structure
+    uint32_t& pc = ctx.pc;
+    uint32_t* reg = ctx.reg;
+
+    if (!binary.getSymbolAddress("_start").has_value()) {
         std::cout << "No _start symbol found, using default init" << std::endl;
-        reg[1] = BASE_RA; // init ra
-        reg[2] = sizeof(mem); // init sp
-        reg[3] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
+        ctx.reg[1] = BASE_RA; // init ra to known address, as no exit syscall will exist
+        ctx.reg[3] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
     }
 
     while (true) {
         reg[0] = 0;
 
-        uint32_t instruction = *reinterpret_cast<uint32_t *>(&mem[pc]);
+        auto instruction = memory.read<uint32_t>(pc);
         uint8_t op = Decoder::getOpcode(instruction);
         uint8_t funct3 = Decoder::getFunct3(instruction);
         uint8_t funct7 = Decoder::getFunct7(instruction);
@@ -192,50 +184,50 @@ int main(int argc, char** argv) {
         // lb
         if (op == 0b0000011 && funct3 == 0x0) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = static_cast<int32_t>(static_cast<int8_t>(mem[address]));
+            reg[rd] = static_cast<int32_t>(memory.read<int8_t>(address));
             LOG_INST(pc, "lb");
         }
         // lbu
         if (op == 0b0000011 && funct3 == 0x4) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = mem[address];
+            reg[rd] = memory.read<uint8_t>(address);
             LOG_INST(pc, "lbu");
         }
         // lh
         if (op == 0b0000011 && funct3 == 0x1) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = static_cast<int32_t>(*reinterpret_cast<int16_t *>(&mem[address]));
+            reg[rd] = static_cast<int32_t>(memory.read<int16_t>(address));
             LOG_INST(pc, "lh");
         }
         // lhu
         if (op == 0b0000011 && funct3 == 0x5) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = *reinterpret_cast<uint16_t *>(&mem[address]);
+            reg[rd] = memory.read<uint16_t>(address);
             LOG_INST(pc, "lhu");
         }
         // lw
         if (op == 0b0000011 && funct3 == 0x2) {
             uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = *reinterpret_cast<uint32_t *>(&mem[address]);
+            reg[rd] = memory.read<int32_t>(address);
             LOG_INST(pc, "lw");
         }
 
         // sb
         if (op == 0b0100011 && funct3 == 0x0) {
             uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
-            mem[address] = static_cast<uint8_t>(reg[rs2]);
+            memory.write<uint8_t>(address, reg[rs2])
             LOG_INST(pc, "sb");
         }
         // sh
         if (op == 0b0100011 && funct3 == 0x1) {
             uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
-            *reinterpret_cast<uint16_t *>(&mem[address]) = static_cast<uint16_t>(reg[rs2]);
+            memory.write<uint16_t>(address, reg[rs2])
             LOG_INST(pc, "sh");
         }
         // sw
         if (op == 0b0100011 && funct3 == 0x2) {
             uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
-            *reinterpret_cast<uint32_t *>(&mem[address]) = reg[rs2];
+            memory.write<uint32_t>(address, reg[rs2])
             LOG_INST(pc, "sw");
         }
 
@@ -313,14 +305,29 @@ int main(int argc, char** argv) {
             switch (reg[17]) {
                 case 64: // write
                     for (uint32_t i = 0; i < reg[12]; ++i) {
-                        char c = static_cast<char>(mem[reg[11] + i]);
+                        char c = static_cast<char>(memory[reg[11] + i]);
                         std::cout << c;
                     }
                     std::cout << std::flush;
                     break;
                 case 93: // exit
-                    printInfo();
-                    return 0;
+                    Syscall::_exit(ctx);
+                    break;
+                case 66: { // writev https://man7.org/linux/man-pages/man3/writev.3p.html
+                    uint32_t fd = reg[10];
+                    uint32_t iov = reg[11]; // base address of io vector, each entry consists of pointer to start of string to output, and length (2x uint32_t)
+                    uint32_t iovcnt = reg[12]; // number of entries in io vector
+
+                    ssize_t total = 0;
+                    for (uint32_t i = 0; i < iovcnt; i++) {
+                        uint32_t base = memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t));
+                        uint32_t len  = memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t) + sizeof(uint32_t));
+                        write(fd, memory.getHostAddress(base), len);
+                        total += len;
+                    }
+                    reg[10] = total;
+                    break;
+                }
                 default:
                     std::cout << "Unknown ecall with code " << reg[17] << std::endl;
             }
@@ -391,13 +398,14 @@ int main(int argc, char** argv) {
 
         pc += 4;
 
+        // baremetal return without exit syscall
         if (pc == BASE_RA) {
             std::cout << "Returned to BASE_RA" << std::endl;
-            printInfo();
+            printInfo(ctx);
             return 0;
         }
 
-        if (pc < 0x0 || pc >= sizeof(mem)) {
+        if (pc < 0x0 || pc >= memory.getSize()) {
             std::cout << "pc out of bounds" << std::hex << pc << std::endl;
             break;
         }

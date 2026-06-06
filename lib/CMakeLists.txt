@@ -3,6 +3,11 @@ add_library(riscv_lib
         elf/ElfBinarySection.cpp
         decoding/Decoder.cpp
         runtime/registers.h
+        runtime/Memory.cpp
+        runtime/Memory.h
+        runtime/Context.h
+        runtime/syscall.cpp
+        runtime/syscall.h
 )
 
 target_link_libraries(riscv_lib elf)

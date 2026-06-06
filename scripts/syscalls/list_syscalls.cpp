@@ -1,5 +1,5 @@
-#include "../../lib/elf/ElfBinary.h"
-#include "../../lib/runtime/syscalls.h"
+#include "elf/ElfBinary.h"
+#include "runtime/syscallMap.h"
 #include <iostream>
 #include <fstream>
 
