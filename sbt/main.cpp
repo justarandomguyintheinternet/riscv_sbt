@@ -414,11 +414,12 @@ int main(int argc, char** argv) {
 
     emitInfoPrint();
 
-    emit("\n\nint main() {\n");
+    emit("\n\nint main(int argc, char** argv) {\n");
 
-    emit("Context ctx(memory);\n");
-    emit(std::format("ctx.pc = 0x{:X};\n", binary.getEntryAddress()));
-    emit(std::format("\tctx.reg[2] = 0x{:X};\n", MEM_SIZE));
+    emit("\tmemory.loadAux(Auxiliary{ .argc = argc, .argv = argv }, false);\n");
+    emit("\tContext ctx(memory);\n");
+    emit(std::format("\tctx.pc = 0x{:X};\n", binary.getEntryAddress()));
+    emit("\tctx.reg[2] = memory.getStackPointer();\n\n");
 
     // not present for binaries compiled for baremetal, without picolibc
     bool hasStartup = binary.getSymbolAddress("_start").has_value();

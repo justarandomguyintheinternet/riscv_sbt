@@ -6,7 +6,7 @@
 #define DATA_SIZE 0x800000 // todo: allocate either Memory instance or internal memory on heap, must be stored global otherwise
 
 struct Auxiliary {
-    uint8_t argc;
+    int argc;
     char** argv;
 };
 
@@ -28,7 +28,7 @@ public:
         return *reinterpret_cast<T *>(&data[address]);
     }; // Read the specified amount of data
 
-    void loadAux(Auxiliary& aux);
+    void loadAux(Auxiliary aux, bool skipSecondArg);
     uint32_t getStackPointer() const; // Initial stack pointer after loading aux
     void* getHostAddress(uint32_t guestAddress);
     inline uint8_t* getMemory() { return data; }
