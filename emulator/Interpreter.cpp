@@ -4,8 +4,13 @@
 #include "runtime/registers.h"
 #include "runtime/syscall.h"
 
+// Fetch instruction at pc from memory, decode and execute it
 void Interpreter::runInstruction(Context& ctx) {
     auto instruction = ctx.memory.read<uint32_t>(ctx.pc);
+    runInstruction(ctx, instruction);
+};
+
+void Interpreter::runInstruction(Context &ctx, uint32_t instruction) {
     uint8_t op = Decoder::getOpcode(instruction);
     uint8_t funct3 = Decoder::getFunct3(instruction);
     uint8_t funct7 = Decoder::getFunct7(instruction);
@@ -300,7 +305,7 @@ void Interpreter::runInstruction(Context& ctx) {
 
     ctx.pc += 4; // this might be dumb for SBT, idk
     ctx.reg[x0] = 0;
-};
+}
 
 void Interpreter::logInstruction(uint32_t address, const char* name) {
     printf("0x%08x: %s\n", address, name);

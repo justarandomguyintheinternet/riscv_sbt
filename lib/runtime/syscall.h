@@ -9,6 +9,7 @@
 
 namespace Syscall {
     void handle(Context& ctx);
+    void handle(Context& ctx, uint32_t num);
 
     // Specific handlers, inline small ones (?)
     inline void _exit(Context& ctx) {

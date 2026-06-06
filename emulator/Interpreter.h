@@ -13,6 +13,7 @@
 
 namespace Interpreter {
     void runInstruction(Context& ctx);
+    void runInstruction(Context& ctx, uint32_t instruction);
     void logInstruction(uint32_t address, const char* name);
 }
 

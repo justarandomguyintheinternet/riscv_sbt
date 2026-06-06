@@ -43,9 +43,9 @@ std::string REG(InstructionField field) {
 
     if (index == 0) {
         return "0"; // In case of assignment to 0, emit will just skip this instruction anyways
-    } else {
-        return std::format("reg[{}]", index);
     }
+
+    return std::format("ctx.reg[{}]", index);
 }
 
 void emit(std::string_view text) {
@@ -66,10 +66,10 @@ void emit(std::string_view text, uint8_t rd) {
 
 void emitInfoPrint() {
     emit(MULTILINE(
-    void printInfo() {
+    void printInfo(Context& ctx) {
         bool hasRegOutput = false;
         for (int i = 0; i < 32; ++i) {
-            if (reg[i] != 0) {
+            if (ctx.reg[i] != 0) {
                 if (!hasRegOutput) {
                     std::cout << "\nRegisters:\n";
                     std::cout << "  idx   hex         signed\n";
@@ -77,8 +77,8 @@ void emitInfoPrint() {
                 }
 
                 std::cout << "  x" << std::dec << std::setw(2) << std::setfill('0') << i
-                          << "   0x" << std::hex << std::setw(8) << std::setfill('0') << reg[i]
-                          << "  " << std::dec << static_cast<int32_t>(reg[i]) << '\n';
+                          << "   0x" << std::hex << std::setw(8) << std::setfill('0') << ctx.reg[i]
+                          << "  " << std::dec << static_cast<int32_t>(ctx.reg[i]) << '\n';
             }
         }
 
@@ -207,41 +207,41 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
         // todo: move memory functions to generic function
         case EInstruction::LB:
             emitLoadSaveAddress(instruction);
-            emit(std::format("{} = static_cast<int32_t>(static_cast<int8_t>(mem[address]));\n", REG(RD)), instruction.rd);
+            emit(std::format("{} = static_cast<int32_t>(memory.read<int8_t>(address));\n", REG(RD)), instruction.rd);
             break;
         case EInstruction::LH: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("{} = static_cast<int32_t>(*reinterpret_cast<int16_t *>(&mem[address]));\n", REG(RD)), instruction.rd);
+            emit(std::format("{} = static_cast<int32_t>(memory.read<int16_t>(address));\n", REG(RD)), instruction.rd);
             break;
         }
         case EInstruction::LW: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("{} = *reinterpret_cast<uint32_t *>(&mem[address]);\n", REG(RD)), instruction.rd);
+            emit(std::format("{} = memory.read<int32_t>(address);\n", REG(RD)), instruction.rd);
             break;
         }
         case EInstruction::LBU: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("{} = mem[address];\n", REG(RD)), instruction.rd);
+            emit(std::format("{} = ctx.memory.read<uint8_t>(address);\n", REG(RD)), instruction.rd);
             break;
         }
         case EInstruction::LHU: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("{} = *reinterpret_cast<uint16_t *>(&mem[address]);\n", REG(RD)), instruction.rd);
+            emit(std::format("{} = memory.read<uint16_t>(address);\n", REG(RD)), instruction.rd);
             break;
         }
         case EInstruction::SB: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("mem[address] = static_cast<uint8_t>({});\n", REG(RS2)));
+            emit(std::format("memory.write<uint8_t>(address, {});\n", REG(RS2)));
             break;
         }
         case EInstruction::SH: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("*reinterpret_cast<uint16_t *>(&mem[address]) = static_cast<uint16_t>({});\n", REG(RS2)));
+            emit(std::format("memory.write<uint16_t>(address, {});\n", REG(RS2)));
             break;
         }
         case EInstruction::SW: {
             emitLoadSaveAddress(instruction);
-            emit(std::format("*reinterpret_cast<uint32_t *>(&mem[address]) = {};\n", REG(RS2)));
+            emit(std::format("memory.write<uint32_t>(address, {});\n", REG(RS2)));
             break;
         }
         case EInstruction::BEQ:
@@ -268,7 +268,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             break;
         case EInstruction::JALR:
             emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
-            emit(std::format("pc = {} + {};\n", instruction.immediate, REG(RS1)));
+            emit(std::format("ctx.pc = {} + {};\n", instruction.immediate, REG(RS1)));
             emit("continue;\n");
             break;
         case EInstruction::LUI:
@@ -279,18 +279,10 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             break;
         case EInstruction::ECALL:
             if (!reg_known[a7]) {
-                printf("a7 not tracked, skipping at 0x%x\n", instruction.address); //todo: format this stuff out, emit switch as fallback
+                printf("a7 not tracked, 0x%x\n", instruction.address); //todo: format this stuff out, emit switch as fallback
+                emit(std::format("Syscall::handle(ctx);\n"));
             } else {
-                switch (reg_values[a7]) {
-                    case 64: // write
-                        emit("write(0, (const void*)((mem + reg[11])), reg[12]);\n");
-                        break;
-                    case 93: // exit
-                        emit("exit(reg[a0]);\n");
-                        break;
-                    default:
-                        printf("Unsupported syscall number: %d\n", reg_values[a7]);
-                }
+                emit(std::format("Syscall::handle(ctx, {});\n", reg_values[a7]));
             }
             break;
         case EInstruction::EBREAK:
@@ -412,27 +404,29 @@ int main(int argc, char** argv) {
 
     emit("#include <iostream>\n");
     emit("#include <cstdint>\n");
-    emit("#include <iomanip>\n\n");
-    emit("#include <unistd.h>\n\n");
-    emit("#include <runtime/registers.h>\n\n");
+    emit("#include <iomanip>\n");
+    emit("#include <runtime/syscall.h>\n");
+    emit("#include <runtime/Context.h>\n");
+    emit("#include <runtime/Memory.h>\n\n");
 
-    emit(std::format("uint8_t mem[0x{:X}];\n", MEM_SIZE)); // todo: actual memory managment logic
-    emit("uint32_t reg[32];\n"); // todo: register allocation things
-    emit(std::format("uint32_t pc = 0x{:X};\n\n", binary.getEntryAddress()));
+    emit("Memory memory;\n");
     emit(std::format("void* dispatch[{}] = {{0}};\n", textSize));
 
     emitInfoPrint();
 
     emit("\n\nint main() {\n");
 
+    emit("Context ctx(memory);\n");
+    emit(std::format("ctx.pc = 0x{:X};\n", binary.getEntryAddress()));
+    emit(std::format("\tctx.reg[2] = 0x{:X};\n", MEM_SIZE));
+
     // not present for binaries compiled for baremetal, without picolibc
     bool hasStartup = binary.getSymbolAddress("_start").has_value();
 
     if (!hasStartup) {
         std::cout << "No _start symbol found, using default init" << std::endl;
-        emit(std::format("\treg[1] = 0x{:X};\n", BASE_RA));
-        emit(std::format("\treg[2] = 0x{:X};\n", MEM_SIZE));
-        emit(std::format("\treg[3] = 0x{:X};\n\n", binary.getSymbolAddress("__global_pointer$").value_or(0)));
+        emit(std::format("\tctx.reg[1] = 0x{:X};\n", BASE_RA));
+        emit(std::format("\tctx.reg[3] = 0x{:X};\n\n", binary.getSymbolAddress("__global_pointer$").value_or(0)));
     }
 
     // build dispatch table https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
@@ -450,15 +444,15 @@ int main(int argc, char** argv) {
         uint32_t dataAddr = dataSection.getLoadAddress(); // Use load address, not virtual one, for when crt0 copies data into to the virtual address
 
         for (auto word : dataSection.getData()) {
-            emit(std::format("\t*reinterpret_cast<uint32_t *>(&mem[0x{:X}]) = 0x{:X};\n", dataAddr, word), word != 0);
+            emit(std::format("\tctx.memory.write<uint32_t>(0x{:X}, 0x{:X});\n", dataAddr, word), word != 0);
             dataAddr += 4;
         }
     }
 
     emit("\n\tuint32_t address;\n");
     emit("\n\twhile (true) {\n");
-    emit(std::format("\t\tuint32_t pcDispatchIndex = (pc - 0x{:X}) / 4;\n", textStartAddress));
-    emit(std::format("\t\tif (pc == 0x{:X}) {{ printInfo(); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
+    emit(std::format("\t\tuint32_t pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
+    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
     emit("\t\tgoto *dispatch[pcDispatchIndex];\n\n");
 
     for (const auto& inst : instructions) {
@@ -469,7 +463,7 @@ int main(int argc, char** argv) {
     emit("}\n");
 
     emit("INVALID:\n");
-    emit("\tstd::cout << \"Invalid instruction at 0x\" << std::hex << pc << std::dec << std::endl;\n");
+    emit("\tstd::cout << \"Invalid instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("\treturn 1;\n");
 
     indent = 0;

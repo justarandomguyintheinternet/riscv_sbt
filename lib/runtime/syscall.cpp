@@ -4,7 +4,11 @@
 
 // todo: figure out a way / check how to make compiler emit only asm for correct syscall, if syscall num is known (during SBT)
 void Syscall::handle(Context& ctx) {
-    switch (ctx.reg[a7]) {
+    handle(ctx, ctx.reg[a7]);
+}
+
+void Syscall::handle(Context& ctx, uint32_t num) {
+    switch (num) {
         case 64: // write
             _write(ctx);
             break;
@@ -16,6 +20,6 @@ void Syscall::handle(Context& ctx) {
             break;
         }
         default:
-            std::cout << "Unknown ecall with code " << ctx.reg[a7] << std::endl;
+            std::cout << "Unknown ecall with code " << num << std::endl;
     }
 }

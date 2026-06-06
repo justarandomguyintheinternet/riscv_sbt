@@ -39,6 +39,12 @@ public:
 
                 if (inst.type == EInstruction::INVALID) {
                     printf("Invalid instruction at %p=%p\n", reinterpret_cast<void *>(addr), reinterpret_cast<void *>(word));
+
+                    inst.type = EInstruction::ADDI;
+                    inst.rd = 0;
+                    inst.rs1 = 0;
+                    inst.immediate = 0;
+                    container.push_back(inst); // NOP
                 } else {
                     container.push_back(inst);
                 }

@@ -111,6 +111,6 @@ namespace Decoder {
             }
         }
 
-        return { .type = EInstruction::INVALID };
+        return { .type = EInstruction::INVALID, .address = address };
     }
 }
