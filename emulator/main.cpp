@@ -1,24 +1,13 @@
 #include <iostream>
-#include <bitset>
 #include <iomanip>
-#include <unistd.h>
 
 #include "elf/ElfBinary.h"
-#include "decoding/Decoder.h"
 #include "runtime/Memory.h"
-#include "runtime/syscall.h"
-#include <sys/uio.h>
+#include "Interpreter.h"
 
 #define BASE_RA 0xdeadbeef
-#define LOG_INSTRUCTIONS 0
 
 Memory memory;
-
-#if LOG_INSTRUCTIONS == 1
-    #define LOG_INST(addr, name) logInstruction(addr, name)
-#else
-    #define LOG_INST(addr, name)
-#endif
 
 void printInfo(Context& ctx) {
     bool hasRegOutput = false;
@@ -37,10 +26,6 @@ void printInfo(Context& ctx) {
     }
 
     std::cout << std::dec << std::setfill(' ');
-}
-
-void logInstruction(uint32_t address, const char* name) {
-    printf("0x%08x: %s\n", address, name);
 }
 
 int main(int argc, char** argv) {
@@ -62,10 +47,6 @@ int main(int argc, char** argv) {
     ctx.pc = binary.getEntryAddress();
     ctx.reg[2] = memory.getStackPointer();
 
-    // temp until instruction emulation is moved to reusable structure
-    uint32_t& pc = ctx.pc;
-    uint32_t* reg = ctx.reg;
-
     if (!binary.getSymbolAddress("_start").has_value()) {
         std::cout << "No _start symbol found, using default init" << std::endl;
         ctx.reg[1] = BASE_RA; // init ra to known address, as no exit syscall will exist
@@ -73,340 +54,17 @@ int main(int argc, char** argv) {
     }
 
     while (true) {
-        reg[0] = 0;
-
-        auto instruction = memory.read<uint32_t>(pc);
-        uint8_t op = Decoder::getOpcode(instruction);
-        uint8_t funct3 = Decoder::getFunct3(instruction);
-        uint8_t funct7 = Decoder::getFunct7(instruction);
-        uint8_t rs1 = Decoder::getRS1(instruction);
-        uint8_t rs2 = Decoder::getRS2(instruction);
-        uint8_t rd = Decoder::getRD(instruction);
-
-        // addi
-        if (op == 0b0010011 && funct3 == 0x0) {
-            reg[rd] = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            LOG_INST(pc, "addi");
-        }
-        // xori
-        if (op == 0b0010011 && funct3 == 0x4) {
-            reg[rd] = reg[rs1] ^ Decoder::I_FMT_imm(instruction);
-            LOG_INST(pc, "xori");
-        }
-        // ori
-        if (op == 0b0010011 && funct3 == 0x6) {
-            reg[rd] = reg[rs1] | Decoder::I_FMT_imm(instruction);
-            LOG_INST(pc, "ori");
-        }
-        // andi
-        if (op == 0b0010011 && funct3 == 0x7) {
-            reg[rd] = reg[rs1] & Decoder::I_FMT_imm(instruction);
-            LOG_INST(pc, "andi");
-        }
-        // slli
-        if (op == 0b0010011 && funct3 == 0x1 && Decoder::getSHType(instruction) == 0x00) {
-            reg[rd] = reg[rs1] << Decoder::getShift(instruction);
-            LOG_INST(pc, "slli");
-        }
-        // srli
-        if (op == 0b0010011 && funct3 == 0x5 && Decoder::getSHType(instruction) == 0x00) {
-            reg[rd] = reg[rs1] >> Decoder::getShift(instruction);
-            LOG_INST(pc, "srli");
-        }
-        // srai
-        if (op == 0b0010011 && funct3 == 0x5 && Decoder::getSHType(instruction) == 0x20) {
-            uint8_t shift = Decoder::getShift(instruction);
-            reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) >> shift);
-            LOG_INST(pc, "srai");
-        }
-        // slti
-        if (op == 0b0010011 && funct3 == 0x2) {
-            reg[rd] = static_cast<int32_t>(reg[rs1]) < Decoder::I_FMT_imm(instruction);
-            LOG_INST(pc, "slti");
-        }
-        // sltiu
-        if (op == 0b0010011 && funct3 == 0x3) {
-            reg[rd] = reg[rs1] < static_cast<uint32_t>(Decoder::I_FMT_imm(instruction));
-            LOG_INST(pc, "sltiu");
-        }
-
-        // add
-        if (op == 0b0110011 && funct3 == 0x0 && funct7 == 0x00) {
-            reg[rd] = reg[rs1] + reg[rs2];
-            LOG_INST(pc, "add");
-        }
-        // sub
-        if (op == 0b0110011 && funct3 == 0x0 && funct7 == 0x20) {
-            reg[rd] = reg[rs1] - reg[rs2];
-            LOG_INST(pc, "sub");
-        }
-        // xor
-        if (op == 0b0110011 && funct3 == 0x4 && funct7 == 0x00) {
-            reg[rd] = reg[rs1] ^ reg[rs2];
-            LOG_INST(pc, "xor");
-        }
-        // or
-        if (op == 0b0110011 && funct3 == 0x6 && funct7 == 0x00) {
-            reg[rd] = reg[rs1] | reg[rs2];
-            LOG_INST(pc, "or");
-        }
-        // and
-        if (op == 0b0110011 && funct3 == 0x7 && funct7 == 0x00) {
-            reg[rd] = reg[rs1] & reg[rs2];
-            LOG_INST(pc, "and");
-        }
-        // sll
-        if (op == 0b0110011 && funct3 == 0x1 && funct7 == 0x00) {
-            reg[rd] = reg[rs1] << (reg[rs2] & 0x1f);
-            LOG_INST(pc, "sll");
-        }
-        // srl
-        if (op == 0b0110011 && funct3 == 0x5 && funct7 == 0x00) {
-            reg[rd] = reg[rs1] >> (reg[rs2] & 0x1f);
-            LOG_INST(pc, "srl");
-        }
-        // sra
-        if (op == 0b0110011 && funct3 == 0x5 && funct7 == 0x20) {
-            uint8_t shift = static_cast<uint8_t>(reg[rs2] & 0x1f);
-            reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) >> shift);
-            LOG_INST(pc, "sra");
-        }
-        // slt
-        if (op == 0b0110011 && funct3 == 0x2 && funct7 == 0x00) {
-            reg[rd] = static_cast<int32_t>(reg[rs1]) < static_cast<int32_t>(reg[rs2]);
-            LOG_INST(pc, "slt");
-        }
-        // sltu
-        if (op == 0b0110011 && funct3 == 0x3 && funct7 == 0x00) {
-            reg[rd] = reg[rs1] < reg[rs2];
-            LOG_INST(pc, "sltu");
-        }
-        // lb
-        if (op == 0b0000011 && funct3 == 0x0) {
-            uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = static_cast<int32_t>(memory.read<int8_t>(address));
-            LOG_INST(pc, "lb");
-        }
-        // lbu
-        if (op == 0b0000011 && funct3 == 0x4) {
-            uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = memory.read<uint8_t>(address);
-            LOG_INST(pc, "lbu");
-        }
-        // lh
-        if (op == 0b0000011 && funct3 == 0x1) {
-            uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = static_cast<int32_t>(memory.read<int16_t>(address));
-            LOG_INST(pc, "lh");
-        }
-        // lhu
-        if (op == 0b0000011 && funct3 == 0x5) {
-            uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = memory.read<uint16_t>(address);
-            LOG_INST(pc, "lhu");
-        }
-        // lw
-        if (op == 0b0000011 && funct3 == 0x2) {
-            uint32_t address = reg[rs1] + Decoder::I_FMT_imm(instruction);
-            reg[rd] = memory.read<int32_t>(address);
-            LOG_INST(pc, "lw");
-        }
-
-        // sb
-        if (op == 0b0100011 && funct3 == 0x0) {
-            uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
-            memory.write<uint8_t>(address, reg[rs2])
-            LOG_INST(pc, "sb");
-        }
-        // sh
-        if (op == 0b0100011 && funct3 == 0x1) {
-            uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
-            memory.write<uint16_t>(address, reg[rs2])
-            LOG_INST(pc, "sh");
-        }
-        // sw
-        if (op == 0b0100011 && funct3 == 0x2) {
-            uint32_t address = reg[rs1] + Decoder::S_FMT_imm(instruction);
-            memory.write<uint32_t>(address, reg[rs2])
-            LOG_INST(pc, "sw");
-        }
-
-        // beq
-        if (op == 0b1100011 && funct3 == 0x0) {
-            LOG_INST(pc, "beq");
-            if (reg[rs1] == reg[rs2]) {
-                pc += Decoder::B_FMT_imm(instruction) - 4;
-            }
-        }
-        // bne
-        if (op == 0b1100011 && funct3 == 0x1) {
-            LOG_INST(pc, "bne");
-            if (reg[rs1] != reg[rs2]) {
-                pc += Decoder::B_FMT_imm(instruction) - 4;
-            }
-        }
-        // blt
-        if (op == 0b1100011 && funct3 == 0x4) {
-            LOG_INST(pc, "blt");
-            if (static_cast<int32_t>(reg[rs1]) < static_cast<int32_t>(reg[rs2])) {
-                pc += Decoder::B_FMT_imm(instruction) - 4;
-            }
-        }
-        // bge
-        if (op == 0b1100011 && funct3 == 0x5) {
-            LOG_INST(pc, "bge");
-            if (static_cast<int32_t>(reg[rs1]) >= static_cast<int32_t>(reg[rs2])) {
-                pc += Decoder::B_FMT_imm(instruction) - 4;
-            }
-        }
-        // bltu
-        if (op == 0b1100011 && funct3 == 0x6) {
-            LOG_INST(pc, "bltu");
-            if (reg[rs1] < reg[rs2]) {
-                pc += Decoder::B_FMT_imm(instruction) - 4;
-            }
-        }
-        // bgeu
-        if (op == 0b1100011 && funct3 == 0x7) {
-            LOG_INST(pc, "bgeu");
-            if (reg[rs1] >= reg[rs2]) {
-                pc += Decoder::B_FMT_imm(instruction) - 4;
-            }
-        }
-
-        // jal
-        if (op == 0b1101111) {
-            LOG_INST(pc, "jal");
-            reg[rd] = pc + 4;
-            pc += Decoder::J_FMT_imm(instruction) - 4;
-        }
-        // jalr
-        if (op == 0b1100111 && funct3 == 0x0) {
-            LOG_INST(pc, "jalr");
-            reg[rd] = pc + 4;
-
-            pc = Decoder::I_FMT_imm(instruction) + reg[rs1] - 4;
-        }
-
-        // lui
-        if (op == 0b0110111) {
-            reg[rd] = Decoder::U_FMT_imm(instruction) << 12;
-            LOG_INST(pc, "lui");
-        }
-        // auipc
-        if (op == 0b0010111) {
-            reg[rd] = pc + (Decoder::U_FMT_imm(instruction) << 12);
-            LOG_INST(pc, "auipc");
-        }
-
-        // ecall
-        if (op == 0b1110011 && Decoder::I_FMT_imm(instruction) == 0x0) {
-            LOG_INST(pc, "ecall");
-            switch (reg[17]) {
-                case 64: // write
-                    for (uint32_t i = 0; i < reg[12]; ++i) {
-                        char c = static_cast<char>(memory[reg[11] + i]);
-                        std::cout << c;
-                    }
-                    std::cout << std::flush;
-                    break;
-                case 93: // exit
-                    Syscall::_exit(ctx);
-                    break;
-                case 66: { // writev https://man7.org/linux/man-pages/man3/writev.3p.html
-                    uint32_t fd = reg[10];
-                    uint32_t iov = reg[11]; // base address of io vector, each entry consists of pointer to start of string to output, and length (2x uint32_t)
-                    uint32_t iovcnt = reg[12]; // number of entries in io vector
-
-                    ssize_t total = 0;
-                    for (uint32_t i = 0; i < iovcnt; i++) {
-                        uint32_t base = memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t));
-                        uint32_t len  = memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t) + sizeof(uint32_t));
-                        write(fd, memory.getHostAddress(base), len);
-                        total += len;
-                    }
-                    reg[10] = total;
-                    break;
-                }
-                default:
-                    std::cout << "Unknown ecall with code " << reg[17] << std::endl;
-            }
-        }
-
-        // RV32M
-
-        // mul
-        if (op == 0b0110011 && funct3 == 0x0 && funct7 == 0x01) {
-            reg[rd] = static_cast<uint64_t>(reg[rs1]) * static_cast<uint64_t>(reg[rs2]) & 0xFFFFFFFF;
-            LOG_INST(pc, "mul");
-        }
-        // mulh
-        if (op == 0b0110011 && funct3 == 0x1 && funct7 == 0x01) {
-            reg[rd] = (static_cast<int64_t>(static_cast<int32_t>(reg[rs1])) * static_cast<int64_t>(static_cast<int32_t>(reg[rs2]))) >> 32;
-            LOG_INST(pc, "mulh");
-        }
-        // mulhsu
-        if (op == 0b0110011 && funct3 == 0x2 && funct7 == 0x01) {
-            reg[rd] = (static_cast<int64_t>(static_cast<int32_t>(reg[rs1])) * static_cast<uint64_t>(reg[rs2])) >> 32;
-            LOG_INST(pc, "mulhsu");
-        }
-        // mulhu
-        if (op == 0b0110011 && funct3 == 0x3 && funct7 == 0x01) {
-            reg[rd] = (static_cast<uint64_t>(reg[rs1]) * static_cast<uint64_t>(reg[rs2])) >> 32;
-            LOG_INST(pc, "mulhu");
-        }
-        // div
-        if (op == 0b0110011 && funct3 == 0x4 && funct7 == 0x01) {
-            if (reg[rs2] == 0) {
-                reg[rd] = -1;
-            } else if (reg[rs1] == 0x80000000 && reg[rs2] == 0xFFFFFFFF) {
-                reg[rd] = 0x80000000;
-            } else {
-                reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) / static_cast<int32_t>(reg[rs2]));
-            }
-            LOG_INST(pc, "div");
-        }
-        // divu
-        if (op == 0b0110011 && funct3 == 0x5 && funct7 == 0x01) {
-            if (reg[rs2] == 0) {
-                reg[rd] = 0xFFFFFFFF;
-            } else {
-                reg[rd] = reg[rs1] / reg[rs2];
-            }
-            LOG_INST(pc, "divu");
-        }
-        // rem
-        if (op == 0b0110011 && funct3 == 0x6 && funct7 == 0x01) {
-            if (reg[rs2] == 0) {
-                reg[rd] = reg[rs1];
-            } else if (reg[rs1] == 0x80000000 && reg[rs2] == 0xFFFFFFFF) {
-                reg[rd] = 0;
-            } else {
-                reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(reg[rs1]) % static_cast<int32_t>(reg[rs2]));
-            }
-            LOG_INST(pc, "rem");
-        }
-        // remu
-        if (op == 0b0110011 && funct3 == 0x7 && funct7 == 0x01) {
-            if (reg[rs2] == 0) {
-                reg[rd] = reg[rs1];
-            } else {
-                reg[rd] = reg[rs1] % reg[rs2];
-            }
-            LOG_INST(pc, "remu");
-        }
-
-        pc += 4;
+        Interpreter::runInstruction(ctx);
 
         // baremetal return without exit syscall
-        if (pc == BASE_RA) {
+        if (ctx.pc == BASE_RA) {
             std::cout << "Returned to BASE_RA" << std::endl;
             printInfo(ctx);
             return 0;
         }
 
-        if (pc < 0x0 || pc >= memory.getSize()) {
-            std::cout << "pc out of bounds" << std::hex << pc << std::endl;
+        if (ctx.pc < 0x0 || ctx.pc >= memory.getSize()) {
+            std::cout << "pc out of bounds" << std::hex << ctx.pc << std::endl;
             break;
         }
     }
