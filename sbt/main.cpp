@@ -88,7 +88,11 @@ void emitInfoPrint() {
 }
 
 void emitLoadSaveAddress(const Instruction& instruction) {
-    emit(std::format("address = {} + {};\n", REG(RS1), instruction.immediate));
+    if (instruction.immediate == 0) {
+        emit(std::format("address = {};\n", REG(RS1)));
+    } else {
+        emit(std::format("address = {} + {};\n", REG(RS1), instruction.immediate));
+    }
 }
 
 // https://github.com/libriscv/libriscv/blob/master/lib/libriscv/tr_emit.cpp#L243-L254
@@ -414,9 +418,9 @@ int main(int argc, char** argv) {
 
     emitInfoPrint();
 
-    emit("\n\nint main(int argc, char** argv) {\n");
+    emit("\n\nint main(int argc, char** argv, char** envp) {\n");
 
-    emit("\tmemory.loadAux(Auxiliary{ .argc = argc, .argv = argv }, false);\n");
+    emit("\tmemory.loadAux(Auxiliary{ .argc = argc, .argv = argv, .envp = envp }, false);\n");
     emit("\tContext ctx(memory);\n");
     emit(std::format("\tctx.pc = 0x{:X};\n", binary.getEntryAddress()));
     emit("\tctx.reg[2] = memory.getStackPointer();\n\n");
@@ -440,6 +444,7 @@ int main(int argc, char** argv) {
     }
 
     // load static data
+    uint32_t dataEnd = 0;
     for (const auto& ref : binary.getTypeSections(ElfBinarySection::SectionType::Data)) {
         const auto& dataSection = ref.get();
         uint32_t dataAddr = dataSection.getLoadAddress(); // Use load address, not virtual one, for when crt0 copies data into to the virtual address
@@ -448,7 +453,13 @@ int main(int argc, char** argv) {
             emit(std::format("\tctx.memory.write<uint32_t>(0x{:X}, 0x{:X});\n", dataAddr, word), word != 0);
             dataAddr += 4;
         }
+
+        if (dataAddr > dataEnd) {
+            dataEnd = dataAddr;
+        }
     }
+
+    emit(std::format("\tmemory.initializeHeap(0x{:X});\n\n", dataEnd));
 
     emit("\n\tuint32_t address;\n");
     emit("\n\twhile (true) {\n");

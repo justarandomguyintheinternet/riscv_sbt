@@ -8,11 +8,12 @@
 struct Auxiliary {
     int argc;
     char** argv;
+    char** envp;
 };
 
 class Memory {
 public:
-    explicit Memory() : data{}, initialSP(DATA_SIZE - 1) {};
+    explicit Memory() : data{}, initialSP(DATA_SIZE - 1), heapEnd(DATA_SIZE / 2) {};
 
     inline uint8_t read(uint32_t address) { return data[address]; };
     uint8_t& operator[](uint32_t n) {
@@ -29,14 +30,22 @@ public:
     }; // Read the specified amount of data
 
     void loadAux(Auxiliary aux, bool skipSecondArg);
+    uint32_t writeAuxValue(uint32_t type, uint32_t value, uint32_t address); // Write a single aux pair to the stack
     uint32_t getStackPointer() const; // Initial stack pointer after loading aux
     void* getHostAddress(uint32_t guestAddress);
     inline uint8_t* getMemory() { return data; }
 
     static uint32_t getSize() { return DATA_SIZE; }
+
+    uint32_t getHeapEnd() const { return this->heapEnd; }
+    void setHeapEnd(uint32_t end) { this->heapEnd = end; }
+    void initializeHeap(uint32_t base);
+    uint32_t getHeapBase() const { return this->heapBase; }
 private:
     uint8_t data[DATA_SIZE];
     uint32_t initialSP;
+    uint32_t heapEnd;
+    uint32_t heapBase;
 };
 
 #endif //RISCV_TOOLS_MEMORY_H

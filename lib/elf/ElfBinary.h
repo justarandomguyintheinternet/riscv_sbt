@@ -8,6 +8,8 @@
 #include "../decoding/Decoder.h"
 #include <gelf.h>
 
+#include "runtime/Memory.h"
+
 class ElfBinary {
 public:
     explicit ElfBinary(const char* filename) : elf(nullptr), filename(filename), fd(0) {};
@@ -22,7 +24,7 @@ public:
     };
 
     LoadResult load();
-    void loadToMemory(uint8_t* memory, uint32_t size) const;
+    uint32_t loadToMemory(Memory& memory) const; // Returns highest address to which a value was loaded
 
     template<typename Container>
     void decodeToContainer(Container& container) const {

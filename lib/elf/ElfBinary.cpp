@@ -184,25 +184,30 @@ std::vector<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getTypeSe
     return result;
 }
 
-void ElfBinary::loadToMemory(uint8_t* memory, uint32_t size) const {
+uint32_t ElfBinary::loadToMemory(Memory& memory) const {
+    uint32_t dataEnd = 0;
+
     for (auto& section : getSections()) {
         printf("Loading section %s\n", section.getName().c_str());
         const auto& seg = section.getSegmentInfo();
         uint32_t addr = section.getLoadAddress();
 
-        if (addr + section.getSize() * 4 > size) {
+        if (addr + section.getSize() * 4 > memory.getSize()) {
             printf("Section %s exceeds memory size\n", section.getName().c_str());
             continue;
         }
 
         for (const auto word : section.getData()) {
-            memory[addr] = static_cast<uint8_t>(word & 0xFF);
-            memory[addr + 1] = static_cast<uint8_t>((word >> 8) & 0xFF);
-            memory[addr + 2] = static_cast<uint8_t>((word >> 16) & 0xFF);
-            memory[addr + 3] = static_cast<uint8_t>((word >> 24) & 0xFF);
+            memory.write<uint32_t>(addr, word);
             addr += 4;
         }
+
+        if (addr > dataEnd) {
+            dataEnd = addr;
+        }
     }
+
+    return dataEnd;
 }
 
 int32_t ElfBinary::getEntryAddress() const {

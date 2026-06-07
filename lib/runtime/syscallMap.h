@@ -6,6 +6,7 @@
 
 // Maps riscv syscall number to target architecture syscall number by using syscall number constants defined in the kernel headers.
 // Mdae from riscv64-linux-gnu\asm\unistd_32.h
+// https://syscalls.mebeim.net/?table=riscv/32/rv32/latest
 
 #define NUM_SYSCALLS 462
 

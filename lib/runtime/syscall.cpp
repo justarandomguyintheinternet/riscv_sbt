@@ -1,5 +1,4 @@
 #include "syscall.h"
-
 #include <iostream>
 
 // todo: figure out a way / check how to make compiler emit only asm for correct syscall, if syscall num is known (during SBT)
@@ -13,6 +12,7 @@ void Syscall::handle(Context& ctx, uint32_t num) {
             _write(ctx);
             break;
         case 93: // exit
+        case 94: // exit_group
             _exit(ctx);
             break;
         case 66: { // writev https://man7.org/linux/man-pages/man3/writev.3p.html
@@ -20,11 +20,11 @@ void Syscall::handle(Context& ctx, uint32_t num) {
             break;
         }
         case 214: {
-            // brk
+            _brk(ctx);
             break;
         }
         case 222: {
-            // mmap
+            _mmap(ctx);
             break;
         }
         default:

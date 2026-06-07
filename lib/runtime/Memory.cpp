@@ -1,40 +1,102 @@
 #include "Memory.h"
 
-#include <algorithm>
-#include <cstdint>
+#include <elf.h>
 #include <cstring>
+
+uint32_t ptrStringSize(char* address) {
+    return strlen(address) + 1; // +1 to take null termination into account
+}
+
+uint32_t ptrStringSize(uint32_t address) {
+    return ptrStringSize(reinterpret_cast<char*>(address));
+}
+
+uint64_t getAuxValue(uint64_t* auxv, uint32_t type) {
+    // auxv is in 64 bit space, as both emu and SBT output run in 64 bit
+
+    for (uint32_t i = 0; auxv[i] != 0; i += 2) {
+        if (auxv[i] == type) {
+            return auxv[i + 1];
+        }
+    }
+    return 0;
+}
+
+uint32_t Memory::writeAuxValue(uint32_t type, uint32_t value, uint32_t address) {
+    this->write<uint32_t>(address, type);
+    this->write<uint32_t>(address + sizeof(uint32_t), value);
+    return sizeof(uint32_t) * 2; // Amount written
+}
 
 // https://articles.manugarg.com/aboutelfauxiliaryvectors
 void Memory::loadAux(Auxiliary aux, bool skipSecondArg) {
     uint32_t argc = aux.argc - (skipSecondArg ? 1 : 0); // emu needs to skip second arg, as thats the path to the to be emulated file
-    uint32_t argsSize = argc * sizeof(uint32_t); // size of argv pointers
+    uint32_t argsSize = 0;
     argsSize += 2 * sizeof(uint32_t); // argc and argv[n] nullptr
+    argsSize += argc * sizeof(uint32_t); // size of argv pointers
 
+    // Total space needed for strings from argv and envp
     uint32_t strSize = 0;
 
-    // Figure out space needed for actual string data, to calculate SP
+    // Space needed for argv strings
     for (uint32_t i = 0; i < aux.argc; i++) {
         if (i == 1 && skipSecondArg) { continue; }
-        strSize += strlen(aux.argv[i]) + 1; // +1 to take null termination into account
+        strSize += ptrStringSize(aux.argv[i]);
     }
+
+    // Space needed for envp strings
+    uint32_t envc = 0;
+    for (uint32_t i = 0; aux.envp[i] != nullptr; i++) {
+        strSize += ptrStringSize(aux.envp[i]);
+        envc++;
+    }
+
+    argsSize += envc * sizeof(uint32_t); // size of envp pointers
+    argsSize += sizeof(uint32_t); // envp nullptr
+
+    // Space for auxv data
+    argsSize += sizeof(Elf32_auxv_t); // AT_PAGESZ
+    argsSize += sizeof(Elf32_auxv_t); // AT_NULL
 
     initialSP = this->getSize() - argsSize - strSize * sizeof(char);
     this->write<uint32_t>(initialSP, argc);
 
+    // For keeping track of where we are writing string data and "data" data (pointers to strings, argc, null terminators and auxv pairs)
     uint32_t strPtr = initialSP + argsSize;
-    uint32_t argPtr = initialSP + sizeof(uint32_t);
+    uint32_t dataPtr = initialSP + sizeof(uint32_t);
 
     // Write argv string pointer + actual string data pairs into memory
     for (uint32_t i = 0; i < aux.argc; i++) {
         if (i == 1 && skipSecondArg) { continue; }
 
-        uint32_t argLen = (strlen(aux.argv[i]) * sizeof(char)) + 1;
-        this->write<uint32_t>(argPtr, strPtr);
+        this->write<uint32_t>(dataPtr, strPtr);
+        uint32_t argLen = ptrStringSize(aux.argv[i]);
         memcpy(this->data + strPtr, aux.argv[i], argLen);
 
-        argPtr += sizeof(uint32_t);
+        dataPtr += sizeof(uint32_t);
         strPtr += argLen;
     }
+
+    dataPtr += sizeof(uint32_t); // argv nullptr
+
+    // Write envp string pointer + actual string data pairs into memory
+    for (uint32_t i = 0; i < envc; i++) {
+        this->write<uint32_t>(dataPtr, strPtr);
+        uint32_t argLen = ptrStringSize(aux.envp[i]);
+        memcpy(this->data + strPtr, aux.envp[i], argLen);
+
+        dataPtr += sizeof(uint32_t);
+        strPtr += argLen;
+    }
+
+    dataPtr += sizeof(uint32_t); // envp nullptr
+
+    // Write auxv data
+    auto* auxv = reinterpret_cast<uint64_t*>(aux.envp);
+    while (*auxv++ != 0) {};
+
+    dataPtr += writeAuxValue(AT_PAGESZ, getAuxValue(auxv, AT_PAGESZ), dataPtr);
+    writeAuxValue(AT_NULL, getAuxValue(auxv, AT_NULL), dataPtr);
 }
 
 uint32_t Memory::getStackPointer() const {
@@ -43,4 +105,9 @@ uint32_t Memory::getStackPointer() const {
 
 void* Memory::getHostAddress(uint32_t guestAddress) {
     return &(this->data[guestAddress]);
+}
+
+void Memory::initializeHeap(uint32_t base) {
+    this->heapBase = base;
+    this->heapEnd = base + 0x100; // somewhat sane default brk maybe idk
 }

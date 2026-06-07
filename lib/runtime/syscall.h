@@ -34,6 +34,26 @@ namespace Syscall {
         }
         ctx.reg[a0] = total;
     }
+
+    inline void _brk(Context& ctx) {
+        if (ctx.reg[a0] == 0 || ctx.reg[a0] < ctx.memory.getHeapBase()) {
+            ctx.reg[a0] = ctx.memory.getHeapEnd();
+            return;
+        }
+
+        if (ctx.reg[0] > ctx.reg[sp]) { // hitting the stack
+            ctx.reg[a0] = ctx.memory.getHeapEnd();
+        } else {
+            ctx.memory.setHeapEnd(ctx.reg[a0]);
+        }
+    }
+
+    inline void _mmap(Context& ctx) {
+        if (ctx.reg[a0] == 0) {
+            // todo: do some very basic handling, omitted for now as otherwise busybox starts running into atomics instructions
+            //ctx.reg[a0] = ctx.memory.getHeapBase();
+        }
+    }
 }
 
 #endif //RISCV_TOOLS_SYSCALL_H

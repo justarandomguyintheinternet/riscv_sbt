@@ -29,7 +29,7 @@ void printInfo(Context& ctx) {
     std::cout << std::dec << std::setfill(' ');
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv, char** envp) {
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <elf binary>" << std::endl;
         return 1;
@@ -42,9 +42,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    binary.loadToMemory(memory.getMemory(), memory.getSize());
+    uint32_t dataEnd = binary.loadToMemory(memory);
+    memory.initializeHeap(dataEnd);
+
     strcpy(argv[0], argv[1]); // some programs like busybox check their own name and might not work correctly otherwise
-    memory.loadAux(Auxiliary{ .argc = argc, .argv = argv }, true);
+    memory.loadAux(Auxiliary{ .argc = argc, .argv = argv, .envp = envp }, true);
 
     Context ctx(memory);
     ctx.pc = binary.getEntryAddress();
