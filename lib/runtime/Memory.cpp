@@ -58,7 +58,7 @@ void Memory::loadAux(Auxiliary aux, bool skipSecondArg) {
     argsSize += sizeof(Elf32_auxv_t); // AT_PAGESZ
     argsSize += sizeof(Elf32_auxv_t); // AT_NULL
 
-    initialSP = this->getSize() - argsSize - strSize * sizeof(char);
+    initialSP = this->getSize() - argsSize - strSize * sizeof(char); // todo align
     this->write<uint32_t>(initialSP, argc);
 
     // For keeping track of where we are writing string data and "data" data (pointers to strings, argc, null terminators and auxv pairs)

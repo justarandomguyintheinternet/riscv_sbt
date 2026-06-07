@@ -4,12 +4,15 @@
 #include <runtime/Context.h>
 #include <cstdlib>
 #include <unistd.h>
+#include <errno.h>
+#include <time.h>
 
 #include "registers.h"
 
 namespace Syscall {
     void handle(Context& ctx);
     void handle(Context& ctx, uint32_t num);
+    void handleError(Context& ctx);
 
     // Specific handlers, inline small ones (?)
     inline void _exit(Context& ctx) {
@@ -53,6 +56,19 @@ namespace Syscall {
             // todo: do some very basic handling, omitted for now as otherwise busybox starts running into atomics instructions
             //ctx.reg[a0] = ctx.memory.getHeapBase();
         }
+    }
+
+    // https://man7.org/linux/man-pages/man3/clock_gettime.3.html
+    inline void _clock_gettime(Context& ctx) {
+        timespec ts{};
+
+        ctx.reg[a0] = clock_gettime(ctx.reg[a0], &ts);
+
+        // rv32 also uses 64 bit time
+        ctx.memory.write<uint64_t>(ctx.reg[a1], static_cast<uint64_t>(ts.tv_sec));
+        ctx.memory.write<uint64_t>(ctx.reg[a1] + sizeof(uint64_t), static_cast<uint64_t>(ts.tv_nsec));
+
+        handleError(ctx);
     }
 }
 

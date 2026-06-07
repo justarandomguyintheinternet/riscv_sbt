@@ -1,6 +1,12 @@
 #include "syscall.h"
 #include <iostream>
 
+void Syscall::handleError(Context& ctx) {
+    if (ctx.reg[a0] < 0) {
+        ctx.reg[a0] = -errno;
+    }
+}
+
 // todo: figure out a way / check how to make compiler emit only asm for correct syscall, if syscall num is known (during SBT)
 void Syscall::handle(Context& ctx) {
     handle(ctx, ctx.reg[a7]);
@@ -25,6 +31,10 @@ void Syscall::handle(Context& ctx, uint32_t num) {
         }
         case 222: {
             _mmap(ctx);
+            break;
+        }
+        case 403: {
+            _clock_gettime(ctx);
             break;
         }
         default:
