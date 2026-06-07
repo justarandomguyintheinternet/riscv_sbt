@@ -33,6 +33,9 @@ public:
     uint32_t writeAuxValue(uint32_t type, uint32_t value, uint32_t address); // Write a single aux pair to the stack
     uint32_t getStackPointer() const; // Initial stack pointer after loading aux
     void* getHostAddress(uint32_t guestAddress);
+
+    uint32_t getGuestAddress(void *hostAddress);
+
     inline uint8_t* getMemory() { return data; }
 
     static uint32_t getSize() { return DATA_SIZE; }
@@ -41,11 +44,13 @@ public:
     void setHeapEnd(uint32_t end) { this->heapEnd = end; }
     void initializeHeap(uint32_t base);
     uint32_t getHeapBase() const { return this->heapBase; }
+    uint64_t getPageSize() const { return this->pageSize; }
 private:
     uint8_t data[DATA_SIZE];
     uint32_t initialSP;
     uint32_t heapEnd;
     uint32_t heapBase;
+    uint64_t pageSize;
 };
 
 #endif //RISCV_TOOLS_MEMORY_H

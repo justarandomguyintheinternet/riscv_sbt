@@ -4,8 +4,10 @@
 #include <runtime/Context.h>
 #include <cstdlib>
 #include <unistd.h>
-#include <errno.h>
-#include <time.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <ctime>
+#include <sys/mman.h>
 
 #include "registers.h"
 
@@ -53,13 +55,18 @@ namespace Syscall {
 
     inline void _mmap(Context& ctx) {
         if (ctx.reg[a0] == 0) {
-            // todo: do some very basic handling, omitted for now as otherwise busybox starts running into atomics instructions
-            //ctx.reg[a0] = ctx.memory.getHeapBase();
+            // todo: actually use some super basic bump allocator and put these maybe above the stack
+            ctx.reg[a0] = ctx.memory.getHeapBase();
+
+            // use MAP_FIXED to force kernel to map directly into the guest memory
+            void* address = mmap(ctx.memory.getHostAddress(ctx.reg[a0]), ctx.reg[a1], ctx.reg[a2], ctx.reg[a3] | MAP_FIXED, ctx.reg[a4], ctx.reg[a5]);
+            ctx.reg[a0] = ctx.memory.getGuestAddress(address);
+            // todo error handling
         }
     }
 
     // https://man7.org/linux/man-pages/man3/clock_gettime.3.html
-    inline void _clock_gettime(Context& ctx) {
+    inline void _clock_gettime64(Context& ctx) {
         timespec ts{};
 
         ctx.reg[a0] = clock_gettime(ctx.reg[a0], &ts);
@@ -67,6 +74,26 @@ namespace Syscall {
         // rv32 also uses 64 bit time
         ctx.memory.write<uint64_t>(ctx.reg[a1], static_cast<uint64_t>(ts.tv_sec));
         ctx.memory.write<uint64_t>(ctx.reg[a1] + sizeof(uint64_t), static_cast<uint64_t>(ts.tv_nsec));
+
+        handleError(ctx);
+    }
+
+    // https://man7.org/linux/man-pages/man2/openat2.2.html
+    inline void _openat(Context& ctx) {
+        ctx.reg[a0] = openat(ctx.reg[a0], static_cast<const char *>(ctx.memory.getHostAddress(ctx.reg[a1])), ctx.reg[a2]);
+        handleError(ctx);
+    }
+
+    // https://man7.org/linux/man-pages/man2/statx.2.html, really neat because its struct uses all fixed size types
+    inline void _statx(Context& ctx) {
+        // this should be fine even for unaligned pointer addresses, assuming target arch allows unaligned mem access (like x86)
+        ctx.reg[a0] = statx(
+            ctx.reg[a0],
+            static_cast<const char*>(ctx.memory.getHostAddress(ctx.reg[a1])), // path
+            ctx.reg[a2],
+            ctx.reg[a3],
+            static_cast<struct statx*>(ctx.memory.getHostAddress(ctx.reg[a4])) // statx struct pointer to be written to
+        );
 
         handleError(ctx);
     }

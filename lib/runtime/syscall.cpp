@@ -14,6 +14,9 @@ void Syscall::handle(Context& ctx) {
 
 void Syscall::handle(Context& ctx, uint32_t num) {
     switch (num) {
+        case 56: // openat
+            _openat(ctx);
+            break;
         case 64: // write
             _write(ctx);
             break;
@@ -33,8 +36,12 @@ void Syscall::handle(Context& ctx, uint32_t num) {
             _mmap(ctx);
             break;
         }
+        case 291: { // statx
+            _statx(ctx);
+            break;
+        }
         case 403: {
-            _clock_gettime(ctx);
+            _clock_gettime64(ctx);
             break;
         }
         default:

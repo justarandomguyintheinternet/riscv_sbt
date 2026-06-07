@@ -95,7 +95,8 @@ void Memory::loadAux(Auxiliary aux, bool skipSecondArg) {
     auto* auxv = reinterpret_cast<uint64_t*>(aux.envp);
     while (*auxv++ != 0) {};
 
-    dataPtr += writeAuxValue(AT_PAGESZ, getAuxValue(auxv, AT_PAGESZ), dataPtr);
+    this->pageSize = getAuxValue(auxv, AT_PAGESZ);
+    dataPtr += writeAuxValue(AT_PAGESZ, this->pageSize, dataPtr);
     writeAuxValue(AT_NULL, getAuxValue(auxv, AT_NULL), dataPtr);
 }
 
@@ -107,7 +108,16 @@ void* Memory::getHostAddress(uint32_t guestAddress) {
     return &(this->data[guestAddress]);
 }
 
+uint32_t Memory::getGuestAddress(void* hostAddress) {
+    return static_cast<uint32_t>(static_cast<uint8_t *>(hostAddress) - data);
+}
+
 void Memory::initializeHeap(uint32_t base) {
+    // Page align heap base in host memory space
+    auto hostData = reinterpret_cast<uintptr_t>(data);
+    uintptr_t hostBase = hostData + base;
+    base = ((hostBase + (pageSize - 1)) & ~(pageSize - 1)) - hostData; // Align hostBase, then transform that back to guest space, so that getHostAddress(base) % pageSize == 0
+
     this->heapBase = base;
-    this->heapEnd = base + 0x100; // somewhat sane default brk maybe idk
+    this->heapEnd = base;
 }

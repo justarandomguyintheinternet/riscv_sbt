@@ -43,10 +43,10 @@ int main(int argc, char** argv, char** envp) {
     }
 
     uint32_t dataEnd = binary.loadToMemory(memory);
-    memory.initializeHeap(dataEnd);
 
     strcpy(argv[0], argv[1]); // some programs like busybox check their own name and might not work correctly otherwise
     memory.loadAux(Auxiliary{ .argc = argc, .argv = argv, .envp = envp }, true);
+    memory.initializeHeap(dataEnd);
 
     Context ctx(memory);
     ctx.pc = binary.getEntryAddress();
