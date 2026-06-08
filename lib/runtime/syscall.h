@@ -30,14 +30,12 @@ namespace Syscall {
         uint32_t iov = ctx.reg[a1]; // base address of io vector, each entry consists of pointer to start of string to output, and length (2x uint32_t)
         uint32_t iovcnt = ctx.reg[a2]; // number of entries in io vector
 
-        ssize_t total = 0;
+        ctx.reg[a0] = 0;
         for (uint32_t i = 0; i < iovcnt; i++) {
             uint32_t base = ctx.memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t));
             uint32_t len  = ctx.memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t) + sizeof(uint32_t));
-            write(fd, ctx.memory.getHostAddress(base), len);
-            total += len;
+            ctx.reg[a0] += write(fd, ctx.memory.getHostAddress(base), len);
         }
-        ctx.reg[a0] = total;
     }
 
     inline void _brk(Context& ctx) {

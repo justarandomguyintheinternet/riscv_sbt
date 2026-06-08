@@ -108,7 +108,7 @@ void* Memory::getHostAddress(uint32_t guestAddress) {
     return &(this->data[guestAddress]);
 }
 
-uint32_t Memory::getGuestAddress(void* hostAddress) {
+uint32_t Memory::getGuestAddress(void* hostAddress) const {
     return static_cast<uint32_t>(static_cast<uint8_t *>(hostAddress) - data);
 }
 

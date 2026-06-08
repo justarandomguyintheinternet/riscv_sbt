@@ -32,12 +32,11 @@ public:
     void loadAux(Auxiliary aux, bool skipSecondArg);
     uint32_t writeAuxValue(uint32_t type, uint32_t value, uint32_t address); // Write a single aux pair to the stack
     uint32_t getStackPointer() const; // Initial stack pointer after loading aux
-    void* getHostAddress(uint32_t guestAddress);
 
-    uint32_t getGuestAddress(void *hostAddress);
+    void* getHostAddress(uint32_t guestAddress);
+    uint32_t getGuestAddress(void *hostAddress) const;
 
     inline uint8_t* getMemory() { return data; }
-
     static uint32_t getSize() { return DATA_SIZE; }
 
     uint32_t getHeapEnd() const { return this->heapEnd; }

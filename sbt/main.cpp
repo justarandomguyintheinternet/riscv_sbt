@@ -283,7 +283,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
             break;
         case EInstruction::ECALL:
             if (!reg_known[a7]) {
-                printf("a7 not tracked, 0x%x\n", instruction.address); //todo: format this stuff out, emit switch as fallback
+                printf("a7 not tracked, 0x%x\n", instruction.address);
                 emit(std::format("Syscall::handle(ctx);\n"));
             } else {
                 emit(std::format("Syscall::handle(ctx, {});\n", reg_values[a7]));
