@@ -35,6 +35,7 @@ public:
 
     void* getHostAddress(uint32_t guestAddress);
     uint32_t getGuestAddress(void *hostAddress) const;
+    uint32_t pageAlignGuest(uint32_t guestAddress);
 
     inline uint8_t* getMemory() { return data; }
     static uint32_t getSize() { return DATA_SIZE; }

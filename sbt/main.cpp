@@ -45,6 +45,10 @@ std::string REG(InstructionField field) {
         return "0"; // In case of assignment to 0, emit will just skip this instruction anyways
     }
 
+    if (field != InstructionField::RD && reg_known[index]) {
+        return std::format("{}", reg_values[index]);
+    }
+
     return std::format("ctx.reg[{}]", index);
 }
 

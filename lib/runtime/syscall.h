@@ -53,14 +53,19 @@ namespace Syscall {
 
     inline void _mmap(Context& ctx) {
         if (ctx.reg[a0] == 0) {
-            // todo: actually use some super basic bump allocator and put these maybe above the stack
             ctx.reg[a0] = ctx.memory.getHeapBase();
-
-            // use MAP_FIXED to force kernel to map directly into the guest memory
-            void* address = mmap(ctx.memory.getHostAddress(ctx.reg[a0]), ctx.reg[a1], ctx.reg[a2], ctx.reg[a3] | MAP_FIXED, ctx.reg[a4], ctx.reg[a5]);
-            ctx.reg[a0] = ctx.memory.getGuestAddress(address);
-            // todo error handling
         }
+
+        // todo: actually use some super basic bump allocator and put these maybe above the stack
+        // use MAP_FIXED to force kernel to map directly into the guest memory
+        void* address = mmap(ctx.memory.getHostAddress(ctx.reg[a0]), ctx.reg[a1], ctx.reg[a2], ctx.reg[a3] | MAP_FIXED, ctx.reg[a4], ctx.reg[a5]);
+
+        if (address == MAP_FAILED) {
+            ctx.reg[a0] = -1;
+        } else {
+            ctx.reg[a0] = ctx.memory.getGuestAddress(address);
+        }
+        handleError(ctx);
     }
 
     // https://man7.org/linux/man-pages/man3/clock_gettime.3.html

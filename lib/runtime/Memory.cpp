@@ -58,7 +58,8 @@ void Memory::loadAux(Auxiliary aux, bool skipSecondArg) {
     argsSize += sizeof(Elf32_auxv_t); // AT_PAGESZ
     argsSize += sizeof(Elf32_auxv_t); // AT_NULL
 
-    initialSP = this->getSize() - argsSize - strSize * sizeof(char); // todo align
+    initialSP = this->getSize() - argsSize - strSize * sizeof(char);
+    initialSP = initialSP - (initialSP % 2); // 16-bit align stack
     this->write<uint32_t>(initialSP, argc);
 
     // For keeping track of where we are writing string data and "data" data (pointers to strings, argc, null terminators and auxv pairs)
@@ -112,11 +113,14 @@ uint32_t Memory::getGuestAddress(void* hostAddress) const {
     return static_cast<uint32_t>(static_cast<uint8_t *>(hostAddress) - data);
 }
 
+uint32_t Memory::pageAlignGuest(uint32_t guestAddress) {
+    uintptr_t hostAddress = reinterpret_cast<uintptr_t>(getHostAddress(guestAddress));
+    uintptr_t alignedHostAddress = (hostAddress + (pageSize - 1)) & ~(pageSize - 1);
+    return getGuestAddress(reinterpret_cast<void*>(alignedHostAddress));
+}
+
 void Memory::initializeHeap(uint32_t base) {
-    // Page align heap base in host memory space
-    auto hostData = reinterpret_cast<uintptr_t>(data);
-    uintptr_t hostBase = hostData + base;
-    base = ((hostBase + (pageSize - 1)) & ~(pageSize - 1)) - hostData; // Align hostBase, then transform that back to guest space, so that getHostAddress(base) % pageSize == 0
+    base = pageAlignGuest(base);
 
     this->heapBase = base;
     this->heapEnd = base;
