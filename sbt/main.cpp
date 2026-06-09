@@ -16,7 +16,6 @@ uint32_t reg_values[32];
 bool reg_known[32];
 
 #define BASE_RA 0xdeadbeef
-#define MEM_SIZE 0x80000
 #define MULTILINE(...) #__VA_ARGS__
 
 std::string REG(InstructionField field) {
@@ -277,7 +276,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
         case EInstruction::JALR:
             emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
             emit(std::format("ctx.pc = {} + {};\n", instruction.immediate, REG(RS1)));
-            emit("continue;\n");
+            emit("continue;\n"); // todo: maybe add logic reading dispatch table directly here, avoids dispatch loop entirely
             break;
         case EInstruction::LUI:
             emit(std::format("{} = {};\n", REG(RD), instruction.immediate << 12), instruction.rd);
@@ -438,12 +437,15 @@ int main(int argc, char** argv) {
         emit(std::format("\tctx.reg[3] = 0x{:X};\n\n", binary.getSymbolAddress("__global_pointer$").value_or(0)));
     }
 
+    // Default initialize dispatch table
+    emit(std::format("\tfor (uint32_t i = 0; i < {}; i++) {{\n", textSize));
+    emit("\t\tdispatch[i] = &&INVALID;\n");
+    emit("\t}\n\n");
+
     // build dispatch table https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
     for (const auto& inst : instructions) {
         if (leaders.contains(inst.address)) {
             emit(std::format("\tdispatch[{}] = &&L{:X};\n", (inst.address - textStartAddress) / 4, inst.address));
-        } else {
-            emit(std::format("\tdispatch[{}] = &&INVALID;\n", (inst.address - textStartAddress) / 4));
         }
     }
 
@@ -471,6 +473,7 @@ int main(int argc, char** argv) {
     emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
     emit("\t\tgoto *dispatch[pcDispatchIndex];\n\n");
 
+    // todo: maybe combine lui + addi into single load
     for (const auto& inst : instructions) {
         emitInstruction(inst, leaders.contains(inst.address));
     }
@@ -480,7 +483,7 @@ int main(int argc, char** argv) {
 
     emit("INVALID:\n");
     emit("\tstd::cout << \"Invalid instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
-    emit("\treturn 1;\n");
+    emit("\treturn 1;\n"); // todo: use emulator as fallback
 
     indent = 0;
     emit("}\n");

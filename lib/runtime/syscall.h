@@ -1,6 +1,7 @@
 #ifndef RISCV_TOOLS_SYSCALL_H
 #define RISCV_TOOLS_SYSCALL_H
 
+#include <cassert>
 #include <runtime/Context.h>
 #include <cstdlib>
 #include <unistd.h>
@@ -23,6 +24,12 @@ namespace Syscall {
 
     inline void _write(Context& ctx) {
         ctx.reg[a0] = write(static_cast<uint8_t>(ctx.reg[a0]), ctx.memory.getHostAddress(ctx.reg[a1]), ctx.reg[a2]);
+        handleError(ctx);
+    }
+
+    inline void _read(Context& ctx) {
+        ctx.reg[a0] = read(static_cast<uint8_t>(ctx.reg[a0]), ctx.memory.getHostAddress(ctx.reg[a1]), ctx.reg[a2]);
+        handleError(ctx);
     }
 
     inline void _writev(Context& ctx) {
@@ -35,6 +42,8 @@ namespace Syscall {
             uint32_t base = ctx.memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t));
             uint32_t len  = ctx.memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t) + sizeof(uint32_t));
             ctx.reg[a0] += write(fd, ctx.memory.getHostAddress(base), len);
+
+            handleError(ctx);
         }
     }
 
@@ -55,6 +64,8 @@ namespace Syscall {
         if (ctx.reg[a0] == 0) {
             ctx.reg[a0] = ctx.memory.getHeapBase();
         }
+
+        assert(reinterpret_cast<uint64_t>(ctx.memory.getHostAddress(ctx.reg[a0])) % ctx.memory.getPageSize() == 0);
 
         // todo: actually use some super basic bump allocator and put these maybe above the stack
         // use MAP_FIXED to force kernel to map directly into the guest memory

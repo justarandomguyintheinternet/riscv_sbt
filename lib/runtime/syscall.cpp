@@ -2,7 +2,7 @@
 #include <iostream>
 
 void Syscall::handleError(Context& ctx) {
-    if (ctx.reg[a0] < 0) {
+    if (static_cast<int32_t>(ctx.reg[a0]) < 0) {
         ctx.reg[a0] = -errno;
     }
 }
@@ -16,6 +16,9 @@ void Syscall::handle(Context& ctx, uint32_t num) {
     switch (num) {
         case 56: // openat
             _openat(ctx);
+            break;
+        case 63: // read
+            _read(ctx);
             break;
         case 64: // write
             _write(ctx);

@@ -113,14 +113,12 @@ uint32_t Memory::getGuestAddress(void* hostAddress) const {
     return static_cast<uint32_t>(static_cast<uint8_t *>(hostAddress) - data);
 }
 
-uint32_t Memory::pageAlignGuest(uint32_t guestAddress) {
-    uintptr_t hostAddress = reinterpret_cast<uintptr_t>(getHostAddress(guestAddress));
-    uintptr_t alignedHostAddress = (hostAddress + (pageSize - 1)) & ~(pageSize - 1);
-    return getGuestAddress(reinterpret_cast<void*>(alignedHostAddress));
+uint64_t Memory::pageAlignAddress(uint64_t address) const {
+    return (address + (pageSize - 1)) & ~(pageSize - 1);
 }
 
 void Memory::initializeHeap(uint32_t base) {
-    base = pageAlignGuest(base);
+    base = pageAlignAddress(base);
 
     this->heapBase = base;
     this->heapEnd = base;
