@@ -3,8 +3,10 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <vector>
 
-#define DATA_SIZE 0x800000 // todo: allocate either Memory instance or internal memory on heap, must be stored global otherwise
+#define DATA_SIZE 0x80000
+#define MMAP_SIZE 0x80000
 
 struct Auxiliary {
     int argc;
@@ -15,7 +17,7 @@ struct Auxiliary {
 class Memory {
 public:
     explicit Memory() : data{}, initialSP(DATA_SIZE - 1), heapEnd(DATA_SIZE / 2) {
-        data = static_cast<uint8_t *>(aligned_alloc(4096, DATA_SIZE));
+        data = static_cast<uint8_t *>(aligned_alloc(4096, DATA_SIZE + MMAP_SIZE));
     };
 
     inline uint8_t read(uint32_t address) { return data[address]; };
@@ -48,12 +50,22 @@ public:
     void initializeHeap(uint32_t base);
     uint32_t getHeapBase() const { return this->heapBase; }
     uint64_t getPageSize() const { return this->pageSize; }
+
+    uint32_t getMmapAddress(uint32_t size);
+    bool reserveMmapSpace(uint32_t size);
+    bool freeMmapSpace(uint32_t address, uint32_t size);
+
+    struct MappedArea {
+        uint32_t base;
+        uint32_t size;
+    };
 private:
     uint8_t* data;
     uint32_t initialSP;
     uint32_t heapEnd;
     uint32_t heapBase;
     uint64_t pageSize;
+    std::vector<MappedArea> mappedAreas;
 };
 
 #endif //RISCV_TOOLS_MEMORY_H

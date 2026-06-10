@@ -1,5 +1,6 @@
 #include "Memory.h"
 
+#include <algorithm>
 #include <elf.h>
 #include <cstring>
 
@@ -122,4 +123,47 @@ void Memory::initializeHeap(uint32_t base) {
 
     this->heapBase = base;
     this->heapEnd = base;
+}
+
+// Get the next free and page aligned address where memory of size can be mapped to
+uint32_t Memory::getMmapAddress(uint32_t size) {
+    for (auto it = mappedAreas.begin(); it != mappedAreas.end();) {
+        uint32_t previousEnd = it->base + it->size;
+        previousEnd = pageAlignAddress(previousEnd);
+
+        if (++it == mappedAreas.end()) {
+            return previousEnd;
+        }
+
+        if (it->base - previousEnd >= size) {
+            return previousEnd;
+        }
+    }
+
+    return pageAlignAddress(DATA_SIZE);
+}
+
+bool Memory::reserveMmapSpace(uint32_t size) {
+    uint32_t address = getMmapAddress(size);
+
+    if (address + size > DATA_SIZE + MMAP_SIZE) {
+        return false;
+    }
+
+    mappedAreas.push_back({ address, size });
+    std::ranges::sort(mappedAreas, [](const MappedArea& a, const MappedArea& b) { return a.base < b.base; });
+
+    return true;
+}
+
+bool Memory::freeMmapSpace(uint32_t address, uint32_t size) {
+    auto it = std::ranges::find_if(mappedAreas, [address](const MappedArea& area) { return area.base == address; });
+
+    // todo: actually handle cases where an area is unmapped which was not mapped as a single block (splitting / removing only parts of mappings)
+    if (it == mappedAreas.end() || it->size != size) {
+        return false;
+    }
+
+    mappedAreas.erase(it);
+    return true;
 }

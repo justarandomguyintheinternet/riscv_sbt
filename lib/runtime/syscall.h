@@ -61,13 +61,14 @@ namespace Syscall {
     }
 
     inline void _mmap(Context& ctx) {
-        if (ctx.reg[a0] == 0) {
-            ctx.reg[a0] = ctx.memory.getHeapBase();
+        bool placeFreely = ctx.reg[a0] == 0; // If specific address is given, no need to keep track of it
+
+        if (placeFreely) {
+            ctx.reg[a0] = ctx.memory.getMmapAddress(ctx.reg[a1]);
         }
 
         assert(reinterpret_cast<uint64_t>(ctx.memory.getHostAddress(ctx.reg[a0])) % ctx.memory.getPageSize() == 0);
 
-        // todo: actually use some super basic bump allocator and put these maybe above the stack
         // use MAP_FIXED to force kernel to map directly into the guest memory
         void* address = mmap(ctx.memory.getHostAddress(ctx.reg[a0]), ctx.reg[a1], ctx.reg[a2], ctx.reg[a3] | MAP_FIXED, ctx.reg[a4], ctx.reg[a5]);
 
@@ -75,7 +76,17 @@ namespace Syscall {
             ctx.reg[a0] = -1;
         } else {
             ctx.reg[a0] = ctx.memory.getGuestAddress(address);
+
+            if (placeFreely) {
+                ctx.memory.reserveMmapSpace(ctx.reg[a1]);
+            }
         }
+        handleError(ctx);
+    }
+
+    inline void _munmap(Context& ctx) {
+        ctx.memory.freeMmapSpace(ctx.reg[a0], ctx.reg[a1]);
+        ctx.reg[a0] = munmap(ctx.memory.getHostAddress(ctx.reg[a0]), ctx.reg[a1]);
         handleError(ctx);
     }
 

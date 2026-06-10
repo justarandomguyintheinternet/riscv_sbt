@@ -35,6 +35,10 @@ void Syscall::handle(Context& ctx, uint32_t num) {
             _brk(ctx);
             break;
         }
+        case 215: {
+            _munmap(ctx);
+            break;
+        }
         case 222: {
             _mmap(ctx);
             break;
