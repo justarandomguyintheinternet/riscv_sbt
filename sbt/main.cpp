@@ -414,7 +414,7 @@ int main(int argc, char** argv) {
     emit("#include <iomanip>\n");
     emit("#include <runtime/syscall.h>\n");
     emit("#include <runtime/Context.h>\n");
-    emit("#include <runtime/Memory.h>\n\n");
+    emit("#include <Interpreter.h>\n\n");
 
     emit("Memory memory;\n");
     emit(std::format("void* dispatch[{}] = {{0}};\n", textSize));
@@ -467,6 +467,11 @@ int main(int argc, char** argv) {
 
     emit(std::format("\tmemory.initializeHeap(0x{:X});\n\n", dataEnd));
 
+    // load instructions for fallback emulation, todo: god please tell me there is a better of doing this ??
+    for (const auto& instruction : instructions) {
+        emit(std::format("\tctx.memory.write<uint32_t>(0x{:X}, 0x{:X});\n", instruction.address, instruction.instruction));
+    }
+
     emit("\n\tuint32_t address;\n");
     emit("\n\twhile (true) {\n");
     emit(std::format("\t\tuint32_t pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
@@ -478,14 +483,21 @@ int main(int argc, char** argv) {
         emitInstruction(inst, leaders.contains(inst.address));
     }
 
-    indent = 1;
+    // Emulation fallback
+    indent = 2;
+    emit("INVALID: {\n");
+    emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    emit("\twhile(dispatch[pcDispatchIndex] == &&INVALID) {\n");
+    emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    emit("\t\tInterpreter::runInstruction(ctx);\n\n");
+    emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
+    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
+    emit("\t}\n");
+    emit("\tstd::cout << \"Switching back to translated code at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("}\n");
 
-    emit("INVALID:\n");
-    emit("\tstd::cout << \"Invalid instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
-    emit("\treturn 1;\n"); // todo: use emulator as fallback
-
     indent = 0;
+    emit("\t}\n");
     emit("}\n");
 
     output.close();

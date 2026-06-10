@@ -1,7 +1,7 @@
 #ifndef RISCV_TOOLS_INTERPRETER_H
 #define RISCV_TOOLS_INTERPRETER_H
 
-#include "runtime/Context.h"
+#include <runtime/Context.h>
 
 #define LOG_INSTRUCTIONS 0
 
