@@ -6,6 +6,10 @@ namespace Decoder {
         return (instruction >> 12) & 0x7;
     }
 
+    uint8_t getFunct5(uint32_t instruction) {
+        return (instruction >> 27) & 0x1f;
+    }
+
     uint8_t getFunct7(uint32_t instruction) {
         return (instruction >> 25) & 0x7f;
     }
@@ -69,7 +73,7 @@ namespace Decoder {
     }
 
     Instruction decode(uint32_t data, uint32_t address) {
-        static constexpr std::span<const InstructionSpec> SPEC_LISTS[] = { RV32I, RV32M };
+        static constexpr std::span<const InstructionSpec> SPEC_LISTS[] = { RV32I, RV32M, RV32A };
 
         for (auto list : SPEC_LISTS) {
             for (auto& spec : list) {

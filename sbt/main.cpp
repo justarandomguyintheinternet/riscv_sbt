@@ -348,8 +348,16 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
                 }}
             )", REG(RS2), REG(RD), REG(RS1), REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
+        // RV32A
+        case EInstruction::LR_W:
+            emit(std::format("{} = memory.read<uint32_t>({});\n", REG(RD), REG(RS1)), instruction.rd);
+            break;
+        case EInstruction::SC_W:
+            emit(std::format("memory.write<uint32_t>({}, {});\n", REG(RS1), REG(RS2)), instruction.rd);
+            emit(std::format("{} = 0;\n", REG(RD)), instruction.rd);
+            break;
         case EInstruction::INVALID:
-            emit(std::format("printf(\"Unsupported instruction at 0x{:X}\");\n", instruction.address));
+            emit(std::format("printf(\"Unsupported instruction at 0x{:X}\\n\");\n", instruction.address));
             break;
     }
 

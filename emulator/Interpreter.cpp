@@ -301,6 +301,15 @@ void Interpreter::runInstruction(Context &ctx, uint32_t instruction) {
             ctx.reg[rd] = ctx.reg[rs1] % ctx.reg[rs2];
         }
         LOG_INST(ctx.pc, "remu");
+    // LR_W
+    } else if (op == 0b0101111 && funct3 == 0x2 && Decoder::getFunct5(instruction) == 0x02) {
+        ctx.reg[rd] = ctx.memory.read<int32_t>(ctx.reg[rs1]);
+        LOG_INST(ctx.pc, "lr.w");
+    // SC_W
+    } else if (op == 0b0101111 && funct3 == 0x2 && Decoder::getFunct5(instruction) == 0x03) {
+        ctx.memory.write<uint32_t>(ctx.reg[rs1], ctx.reg[rs2]);
+        ctx.reg[rd] = 0; // success
+        LOG_INST(ctx.pc, "sc.w");
     } else {
         printf("Unsupported instruction at 0x%08x\n", ctx.pc);
     }

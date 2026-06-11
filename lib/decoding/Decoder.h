@@ -24,6 +24,7 @@ enum InstructionField {
 namespace Decoder {
     // Extract minor opcode, 3 bit
     uint8_t getFunct3(uint32_t instruction);
+    uint8_t getFunct5(uint32_t instruction);
     // Extra distinction for R formated instructions, 7 bit
     uint8_t getFunct7(uint32_t instruction);
     // 7 bit

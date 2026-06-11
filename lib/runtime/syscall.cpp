@@ -17,20 +17,26 @@ void Syscall::handle(Context& ctx, uint32_t num) {
         case 56: // openat
             _openat(ctx);
             break;
+        case 57: // close
+            _close(ctx);
+            break;
         case 63: // read
             _read(ctx);
             break;
         case 64: // write
             _write(ctx);
             break;
-        case 93: // exit
-        case 94: // exit_group
-            _exit(ctx);
-            break;
         case 66: { // writev https://man7.org/linux/man-pages/man3/writev.3p.html
             _writev(ctx);
             break;
         }
+        case 93: // exit
+        case 94: // exit_group
+            _exit(ctx);
+            break;
+        case 96: // set_tid_address, ignore for now, used for pthread
+            ctx.reg[a0] = 0;
+            break;
         case 214: {
             _brk(ctx);
             break;

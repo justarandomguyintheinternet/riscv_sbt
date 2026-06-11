@@ -53,7 +53,11 @@ enum class EInstruction {
     DIVU,
     REM,
     REMU,
-    INVALID
+
+    // RV32A (subset)
+    LR_W,
+    SC_W,
+    INVALID,
 };
 
 enum class EInstructionFMT {
@@ -146,6 +150,11 @@ inline constexpr InstructionSpec RV32M[] = {
     { EInstruction::DIVU,    EInstructionFMT::R, 0b0110011, true,  0x5, true,  0x01 },
     { EInstruction::REM,     EInstructionFMT::R, 0b0110011, true,  0x6, true,  0x01 },
     { EInstruction::REMU,    EInstructionFMT::R, 0b0110011, true,  0x7, true,  0x01 }
+};
+
+inline constexpr InstructionSpec RV32A[] = {
+    { EInstruction::LR_W,     EInstructionFMT::R, 0b0101111, true,  0x2, false,  0x0, 0xF8000000, 0x10000000 },
+    { EInstruction::SC_W,    EInstructionFMT::R, 0b0101111, true,  0x2, false,  0x0, 0xF8000000, 0x18000000 }
 };
 
 #endif //RISCV_EMU_INSTRUCTIONS_H

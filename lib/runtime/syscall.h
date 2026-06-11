@@ -109,6 +109,12 @@ namespace Syscall {
         handleError(ctx);
     }
 
+    // https://man7.org/linux/man-pages/man2/close.2.html
+    inline void _close(Context& ctx) {
+        ctx.reg[a0] = close(ctx.reg[a0]);
+        handleError(ctx);
+    }
+
     // https://man7.org/linux/man-pages/man2/statx.2.html, really neat because its struct uses all fixed size types
     inline void _statx(Context& ctx) {
         // this should be fine even for unaligned pointer addresses, assuming target arch allows unaligned mem access (like x86)
