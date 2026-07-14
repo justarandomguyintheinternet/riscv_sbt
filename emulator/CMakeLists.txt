@@ -5,6 +5,7 @@ add_library(riscv_emu
 
 target_include_directories(riscv_emu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(riscv_emu PUBLIC riscv_lib)
+riscv_target_interpreter_profiling(riscv_emu ON)
 
 add_executable(emulator main.cpp)
 target_link_libraries(emulator PRIVATE riscv_emu)

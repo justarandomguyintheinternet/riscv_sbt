@@ -5,10 +5,12 @@
 #include "elf/ElfBinary.h"
 #include "runtime/Memory.h"
 #include "Interpreter.h"
+#include "ProfilingInfo.h"
 
 #define BASE_RA 0xdeadbeef
 
 Memory memory;
+ProfilingInfo info("./profiling.json", true);
 
 void printInfo(Context& ctx) {
     bool hasRegOutput = false;
@@ -57,6 +59,8 @@ int main(int argc, char** argv, char** envp) {
         ctx.reg[1] = BASE_RA; // init ra to known address, as no exit syscall will exist
         ctx.reg[3] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
     }
+
+    Interpreter::activeProfilingInfo = &info;
 
     while (true) {
         Interpreter::runInstruction(ctx);
