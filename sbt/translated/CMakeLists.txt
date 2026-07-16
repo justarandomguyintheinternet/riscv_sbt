@@ -1,5 +1,8 @@
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src.cpp)
+    set(FLAGS_TRANSLATED -O3)
+
     add_executable(translated src.cpp)
+    target_compile_options(translated PRIVATE ${FLAGS_TRANSLATED})
     target_link_libraries(translated PRIVATE riscv_lib)
     target_link_libraries(translated PRIVATE riscv_emu)
 
