@@ -1,0 +1,6 @@
+[submodule "benchmark/coremark"]
+	path = benchmark/coremark
+	url = https://github.com/eembc/coremark.git
+[submodule "benchmark/embench-iot"]
+	path = benchmark/embench-iot
+	url = https://github.com/embench/embench-iot.git
