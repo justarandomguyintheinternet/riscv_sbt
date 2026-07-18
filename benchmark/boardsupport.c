@@ -15,5 +15,5 @@ void stop_trigger() {
     double time_taken = (end_time.tv_sec - start_time.tv_sec) + 
                         (end_time.tv_nsec - start_time.tv_nsec) / 1e9;
                         
-    printf("Embench payload time: %f seconds\n", time_taken);
+    printf("%f\n", time_taken);
 }

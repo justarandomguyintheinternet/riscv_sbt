@@ -389,8 +389,8 @@ std::set<uint32_t> getBasicBlocksLeaders(const std::vector<Instruction>& instruc
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " <elf binary>" << std::endl;
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <elf binary> <output directory>" << std::endl;
         return 1;
     }
 
@@ -415,7 +415,7 @@ int main(int argc, char** argv) {
         textStartAddress = std::min(textStartAddress, ref.get().getStartAddress());
     }
 
-    output.open("./sbt/translated/src.cpp");
+    output.open(argc < 3 ? "./sbt/translated/src.cpp" : argv[2]);
 
     emit("#include <iostream>\n");
     emit("#include <cstdint>\n");
@@ -425,14 +425,62 @@ int main(int argc, char** argv) {
     emit("#include <Interpreter.h>\n\n");
 
     emit("Memory memory;\n");
-    emit(std::format("void* dispatch[{}] = {{0}};\n", textSize));
+    emit("Context ctx(memory);\n");
 
     emitInfoPrint();
 
-    emit("\n\nint main(int argc, char** argv, char** envp) {\n");
+    emit("\n\n__attribute__((noinline))\n");
+    emit("__attribute__((section(\".translated_text\")))\n");
+    emit("int run_translated() {\n");
+
+    // build dispatch table https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
+    emit(std::format("\tstatic void* dispatch[{}] = {{\n", textSize));
+
+    for (uint32_t i = 0; i < textSize; i++) {
+        uint32_t currentAddress = textStartAddress + (i * 4);
+
+        if (leaders.contains(currentAddress)) {
+            emit(std::format("\t\t&&L{:X},\n", currentAddress));
+        } else {
+            emit("\t\t&&INVALID,\n");
+        }
+    }
+
+    emit("\t};\n\n");
+
+    emit("\tuint32_t address;\n");
+    emit("\n\twhile (true) {\n");
+    emit(std::format("\t\tuint32_t pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
+    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
+    emit("\t\tgoto *dispatch[pcDispatchIndex];\n\n");
+
+    // todo: maybe combine lui + addi into single load
+    for (const auto& inst : instructions) {
+        emitInstruction(inst, leaders.contains(inst.address));
+    }
+
+    // Emulation fallback
+    indent = 2;
+    emit("INVALID: {\n");
+    emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    emit("\twhile(dispatch[pcDispatchIndex] == &&INVALID) {\n");
+    emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    emit("\t\tInterpreter::runInstruction(ctx);\n\n");
+    emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
+    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
+    emit("\t}\n");
+    emit("\tstd::cout << \"Switching back to translated code at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    emit("}\n");
+    indent = 1;
+    emit("}\n");
+    indent = 0;
+    emit("}\n");
+
+    // Dispatch table and memory loading
+
+    emit("int main(int argc, char** argv, char** envp) {\n");
 
     emit("\tmemory.loadAux(Auxiliary{ .argc = argc, .argv = argv, .envp = envp }, false);\n");
-    emit("\tContext ctx(memory);\n");
     emit(std::format("\tctx.pc = 0x{:X};\n", binary.getEntryAddress()));
     emit("\tctx.reg[2] = memory.getStackPointer();\n\n");
 
@@ -443,18 +491,6 @@ int main(int argc, char** argv) {
         std::cout << "No _start symbol found, using default init" << std::endl;
         emit(std::format("\tctx.reg[1] = 0x{:X};\n", BASE_RA));
         emit(std::format("\tctx.reg[3] = 0x{:X};\n\n", binary.getSymbolAddress("__global_pointer$").value_or(0)));
-    }
-
-    // Default initialize dispatch table
-    emit(std::format("\tfor (uint32_t i = 0; i < {}; i++) {{\n", textSize));
-    emit("\t\tdispatch[i] = &&INVALID;\n");
-    emit("\t}\n\n");
-
-    // build dispatch table https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
-    for (const auto& inst : instructions) {
-        if (leaders.contains(inst.address)) {
-            emit(std::format("\tdispatch[{}] = &&L{:X};\n", (inst.address - textStartAddress) / 4, inst.address));
-        }
     }
 
     // load static data
@@ -480,32 +516,9 @@ int main(int argc, char** argv) {
         emit(std::format("\tctx.memory.write<uint32_t>(0x{:X}, 0x{:X});\n", instruction.address, instruction.instruction));
     }
 
-    emit("\n\tuint32_t address;\n");
-    emit("\n\twhile (true) {\n");
-    emit(std::format("\t\tuint32_t pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
-    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
-    emit("\t\tgoto *dispatch[pcDispatchIndex];\n\n");
-
-    // todo: maybe combine lui + addi into single load
-    for (const auto& inst : instructions) {
-        emitInstruction(inst, leaders.contains(inst.address));
-    }
-
-    // Emulation fallback
-    indent = 2;
-    emit("INVALID: {\n");
-    emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
-    emit("\twhile(dispatch[pcDispatchIndex] == &&INVALID) {\n");
-    emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
-    emit("\t\tInterpreter::runInstruction(ctx);\n\n");
-    emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
-    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
-    emit("\t}\n");
-    emit("\tstd::cout << \"Switching back to translated code at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
-    emit("}\n");
+    emit("\n\treturn run_translated();\n");
 
     indent = 0;
-    emit("\t}\n");
     emit("}\n");
 
     output.close();
