@@ -276,6 +276,7 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
         case EInstruction::JALR:
             emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
             emit(std::format("ctx.pc = {} + {};\n", instruction.immediate, REG(RS1)));
+            emit("timerActive = true; timer = __rdtsc();\n");
             emit("continue;\n"); // todo: maybe add logic reading dispatch table directly here, avoids dispatch loop entirely
             break;
         case EInstruction::LUI:
@@ -417,15 +418,25 @@ int main(int argc, char** argv) {
 
     output.open(argc < 3 ? "./sbt/translated/src.cpp" : argv[2]);
 
+    // Translated code emission start
+
     emit("#include <iostream>\n");
     emit("#include <cstdint>\n");
     emit("#include <iomanip>\n");
     emit("#include <runtime/syscall.h>\n");
     emit("#include <runtime/Context.h>\n");
-    emit("#include <Interpreter.h>\n\n");
+    emit("#include <Interpreter.h>\n");
+    emit("#include <x86intrin.h>\n");
+    emit("#pragma intrinsic(__rdtsc)\n\n");
 
     emit("Memory memory;\n");
     emit("Context ctx(memory);\n");
+
+    emit("\nbool timerActive = false;\n");
+    emit("uint64_t cycles = 0;\n");
+    emit("uint64_t timer = 0;\n");
+    emit("uint64_t indirectMeasured = 0;\n");
+    emit("uint8_t heatup = 5;\n");
 
     emitInfoPrint();
 
@@ -452,7 +463,12 @@ int main(int argc, char** argv) {
     emit("\n\twhile (true) {\n");
     emit(std::format("\t\tuint32_t pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
     emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
-    emit("\t\tgoto *dispatch[pcDispatchIndex];\n\n");
+    emit("\t\tvoid* target = dispatch[pcDispatchIndex];\n");
+
+    emit("\t\tif (timerActive && heatup == 0) {cycles += __rdtsc() - timer; timerActive = false; indirectMeasured++; printf(\"%llu\\n\", (unsigned long long)cycles); }\n");
+    emit("\t\tif(heatup > 0) { heatup--; }\n");
+
+    emit("\t\tgoto *target;\n\n");
 
     // todo: maybe combine lui + addi into single load
     for (const auto& inst : instructions) {
@@ -511,7 +527,7 @@ int main(int argc, char** argv) {
 
     emit(std::format("\tmemory.initializeHeap(0x{:X});\n\n", dataEnd));
 
-    // load instructions for fallback emulation, todo: god please tell me there is a better of doing this ??
+    // load instructions for fallback emulation
     for (const auto& instruction : instructions) {
         emit(std::format("\tctx.memory.write<uint32_t>(0x{:X}, 0x{:X});\n", instruction.address, instruction.instruction));
     }

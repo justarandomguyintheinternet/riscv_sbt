@@ -58,7 +58,7 @@ void Syscall::handle(Context& ctx, uint32_t num) {
             break;
         }
         default:
-            std::cout << "Unknown ecall with code " << num << std::endl;
+            //std::cout << "Unknown ecall with code " << num << std::endl;
             ctx.reg[a0] = -1;
     }
 }

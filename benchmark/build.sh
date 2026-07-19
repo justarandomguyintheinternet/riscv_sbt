@@ -4,6 +4,7 @@ TARGET="${1:-riscv}"
 
 # Setup output dir
 mkdir -p bin
+mkdir -p benchmarkResults
 
 case "$TARGET" in
     riscv)
@@ -45,6 +46,10 @@ fi
 # get cpu base freq on wsl2
 if command -v wmic.exe &> /dev/null; then
     MAX_FREQ_MHZ=$(wmic.exe cpu get maxclockspeed 2>/dev/null | grep -Eo '[0-9]+' | head -n 1)
+fi
+
+if [ ! -z "$2" ]; then
+  MAX_FREQ_MHZ=$2
 fi
 
 # get cpu freq on "normal" linux

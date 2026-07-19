@@ -15,5 +15,5 @@ void stop_trigger() {
     double time_taken = (end_time.tv_sec - start_time.tv_sec) + 
                         (end_time.tv_nsec - start_time.tv_nsec) / 1e9;
                         
-    printf("%f\n", time_taken);
+    printf("Total time (secs): %f\n", time_taken);
 }

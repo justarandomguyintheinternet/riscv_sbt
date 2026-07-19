@@ -319,6 +319,314 @@ void Interpreter::runInstruction(Context &ctx, uint32_t instruction) {
     ctx.reg[x0] = 0;
 }
 
+void Interpreter::runInstructionSwitch(Context& ctx) {
+    auto instruction = ctx.memory.read<uint32_t>(ctx.pc);
+    runInstructionSwitch(ctx, instruction);
+};
+
+void Interpreter::runInstructionSwitch(Context &ctx, uint32_t instruction) {
+    uint8_t op = Decoder::getOpcode(instruction);
+    uint8_t funct3 = Decoder::getFunct3(instruction);
+    uint8_t funct7 = Decoder::getFunct7(instruction);
+    uint8_t rs1 = Decoder::getRS1(instruction);
+    uint8_t rs2 = Decoder::getRS2(instruction);
+    uint8_t rd = Decoder::getRD(instruction);
+
+    switch (op) {
+        case 0b0010011:
+            switch (funct3) {
+                case 0x0:
+                    ctx.reg[rd] = ctx.reg[rs1] + Decoder::I_FMT_imm(instruction);
+                    LOG_INST(ctx, "addi");
+                    break;
+                case 0x1:
+                    if (Decoder::getSHType(instruction) == 0x00) {
+                        ctx.reg[rd] = ctx.reg[rs1] << Decoder::getShift(instruction);
+                        LOG_INST(ctx, "slli");
+                    }
+                    break;
+                case 0x2:
+                    ctx.reg[rd] = static_cast<int32_t>(ctx.reg[rs1]) < Decoder::I_FMT_imm(instruction);
+                    LOG_INST(ctx, "slti");
+                    break;
+                case 0x3:
+                    ctx.reg[rd] = ctx.reg[rs1] < static_cast<uint32_t>(Decoder::I_FMT_imm(instruction));
+                    LOG_INST(ctx, "sltiu");
+                    break;
+                case 0x4:
+                    ctx.reg[rd] = ctx.reg[rs1] ^ Decoder::I_FMT_imm(instruction);
+                    LOG_INST(ctx, "xori");
+                    break;
+                case 0x5:
+                    if (Decoder::getSHType(instruction) == 0x00) {
+                        ctx.reg[rd] = ctx.reg[rs1] >> Decoder::getShift(instruction);
+                        LOG_INST(ctx, "srli");
+                    } else if (Decoder::getSHType(instruction) == 0x20) {
+                        uint8_t shift = Decoder::getShift(instruction);
+                        ctx.reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(ctx.reg[rs1]) >> shift);
+                        LOG_INST(ctx, "srai");
+                    }
+                    break;
+                case 0x6:
+                    ctx.reg[rd] = ctx.reg[rs1] | Decoder::I_FMT_imm(instruction);
+                    LOG_INST(ctx, "ori");
+                    break;
+                case 0x7:
+                    ctx.reg[rd] = ctx.reg[rs1] & Decoder::I_FMT_imm(instruction);
+                    LOG_INST(ctx, "andi");
+                    break;
+            }
+            break;
+        case 0b0110011:
+            switch (funct3) {
+                case 0x0:
+                    if (funct7 == 0x00) {
+                        ctx.reg[rd] = ctx.reg[rs1] + ctx.reg[rs2];
+                        LOG_INST(ctx, "add");
+                    } else if (funct7 == 0x20) {
+                        ctx.reg[rd] = ctx.reg[rs1] - ctx.reg[rs2];
+                        LOG_INST(ctx, "sub");
+                    } else if (funct7 == 0x01) {
+                        ctx.reg[rd] = static_cast<uint64_t>(ctx.reg[rs1]) * static_cast<uint64_t>(ctx.reg[rs2]) & 0xFFFFFFFF;
+                        LOG_INST(ctx, "mul");
+                    }
+                    break;
+                case 0x1:
+                    if (funct7 == 0x00) {
+                        ctx.reg[rd] = ctx.reg[rs1] << (ctx.reg[rs2] & 0x1f);
+                        LOG_INST(ctx, "sll");
+                    } else if (funct7 == 0x01) {
+                        ctx.reg[rd] = (static_cast<int64_t>(static_cast<int32_t>(ctx.reg[rs1])) * static_cast<int64_t>(static_cast<int32_t>(ctx.reg[rs2]))) >> 32;
+                        LOG_INST(ctx, "mulh");
+                    }
+                    break;
+                case 0x2:
+                    if (funct7 == 0x00) {
+                        ctx.reg[rd] = static_cast<int32_t>(ctx.reg[rs1]) < static_cast<int32_t>(ctx.reg[rs2]);
+                        LOG_INST(ctx, "slt");
+                    } else if (funct7 == 0x01) {
+                        ctx.reg[rd] = (static_cast<int64_t>(static_cast<int32_t>(ctx.reg[rs1])) * static_cast<uint64_t>(ctx.reg[rs2])) >> 32;
+                        LOG_INST(ctx, "mulhsu");
+                    }
+                    break;
+                case 0x3:
+                    if (funct7 == 0x00) {
+                        ctx.reg[rd] = ctx.reg[rs1] < ctx.reg[rs2];
+                        LOG_INST(ctx, "sltu");
+                    } else if (funct7 == 0x01) {
+                        ctx.reg[rd] = (static_cast<uint64_t>(ctx.reg[rs1]) * static_cast<uint64_t>(ctx.reg[rs2])) >> 32;
+                        LOG_INST(ctx, "mulhu");
+                    }
+                    break;
+                case 0x4:
+                    if (funct7 == 0x00) {
+                        ctx.reg[rd] = ctx.reg[rs1] ^ ctx.reg[rs2];
+                        LOG_INST(ctx, "xor");
+                    } else if (funct7 == 0x01) {
+                        if (ctx.reg[rs2] == 0) {
+                            ctx.reg[rd] = -1;
+                        } else if (ctx.reg[rs1] == 0x80000000 && ctx.reg[rs2] == 0xFFFFFFFF) {
+                            ctx.reg[rd] = 0x80000000;
+                        } else {
+                            ctx.reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(ctx.reg[rs1]) / static_cast<int32_t>(ctx.reg[rs2]));
+                        }
+                        LOG_INST(ctx, "div");
+                    }
+                    break;
+                case 0x5:
+                    if (funct7 == 0x00) {
+                        ctx.reg[rd] = ctx.reg[rs1] >> (ctx.reg[rs2] & 0x1f);
+                        LOG_INST(ctx, "srl");
+                    } else if (funct7 == 0x20) {
+                        uint8_t shift = static_cast<uint8_t>(ctx.reg[rs2] & 0x1f);
+                        ctx.reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(ctx.reg[rs1]) >> shift);
+                        LOG_INST(ctx, "sra");
+                    } else if (funct7 == 0x01) {
+                        if (ctx.reg[rs2] == 0) {
+                            ctx.reg[rd] = 0xFFFFFFFF;
+                        } else {
+                            ctx.reg[rd] = ctx.reg[rs1] / ctx.reg[rs2];
+                        }
+                        LOG_INST(ctx, "divu");
+                    }
+                    break;
+                case 0x6:
+                    if (funct7 == 0x00) {
+                        ctx.reg[rd] = ctx.reg[rs1] | ctx.reg[rs2];
+                        LOG_INST(ctx, "or");
+                    } else if (funct7 == 0x01) {
+                        if (ctx.reg[rs2] == 0) {
+                            ctx.reg[rd] = ctx.reg[rs1];
+                        } else if (ctx.reg[rs1] == 0x80000000 && ctx.reg[rs2] == 0xFFFFFFFF) {
+                            ctx.reg[rd] = 0;
+                        } else {
+                            ctx.reg[rd] = static_cast<uint32_t>(static_cast<int32_t>(ctx.reg[rs1]) % static_cast<int32_t>(ctx.reg[rs2]));
+                        }
+                        LOG_INST(ctx, "rem");
+                    }
+                    break;
+                case 0x7:
+                    if (funct7 == 0x00) {
+                        ctx.reg[rd] = ctx.reg[rs1] & ctx.reg[rs2];
+                        LOG_INST(ctx, "and");
+                    } else if (funct7 == 0x01) {
+                        if (ctx.reg[rs2] == 0) {
+                            ctx.reg[rd] = ctx.reg[rs1];
+                        } else {
+                            ctx.reg[rd] = ctx.reg[rs1] % ctx.reg[rs2];
+                        }
+                        LOG_INST(ctx, "remu");
+                    }
+                    break;
+            }
+            break;
+        case 0b0000011:
+            switch (funct3) {
+                case 0x0: {
+                    uint32_t address = ctx.reg[rs1] + Decoder::I_FMT_imm(instruction);
+                    ctx.reg[rd] = static_cast<int32_t>(ctx.memory.read<int8_t>(address));
+                    LOG_INST(ctx, "lb");
+                    break;
+                }
+                case 0x1: {
+                    uint32_t address = ctx.reg[rs1] + Decoder::I_FMT_imm(instruction);
+                    ctx.reg[rd] = static_cast<int32_t>(ctx.memory.read<int16_t>(address));
+                    LOG_INST(ctx, "lh");
+                    break;
+                }
+                case 0x2: {
+                    uint32_t address = ctx.reg[rs1] + Decoder::I_FMT_imm(instruction);
+                    ctx.reg[rd] = ctx.memory.read<int32_t>(address);
+                    LOG_INST(ctx, "lw");
+                    break;
+                }
+                case 0x4: {
+                    uint32_t address = ctx.reg[rs1] + Decoder::I_FMT_imm(instruction);
+                    ctx.reg[rd] = ctx.memory.read<uint8_t>(address);
+                    LOG_INST(ctx, "lbu");
+                    break;
+                }
+                case 0x5: {
+                    uint32_t address = ctx.reg[rs1] + Decoder::I_FMT_imm(instruction);
+                    ctx.reg[rd] = ctx.memory.read<uint16_t>(address);
+                    LOG_INST(ctx, "lhu");
+                    break;
+                }
+            }
+            break;
+        case 0b0100011:
+            switch (funct3) {
+                case 0x0: {
+                    uint32_t address = ctx.reg[rs1] + Decoder::S_FMT_imm(instruction);
+                    ctx.memory.write<uint8_t>(address, ctx.reg[rs2]);
+                    LOG_INST(ctx, "sb");
+                    break;
+                }
+                case 0x1: {
+                    uint32_t address = ctx.reg[rs1] + Decoder::S_FMT_imm(instruction);
+                    ctx.memory.write<uint16_t>(address, ctx.reg[rs2]);
+                    LOG_INST(ctx, "sh");
+                    break;
+                }
+                case 0x2: {
+                    uint32_t address = ctx.reg[rs1] + Decoder::S_FMT_imm(instruction);
+                    ctx.memory.write<uint32_t>(address, ctx.reg[rs2]);
+                    LOG_INST(ctx, "sw");
+                    break;
+                }
+            }
+            break;
+        case 0b1100011:
+            switch (funct3) {
+                case 0x0:
+                    LOG_INST(ctx, "beq");
+                    if (ctx.reg[rs1] == ctx.reg[rs2]) {
+                        ctx.pc += Decoder::B_FMT_imm(instruction) - 4;
+                    }
+                    break;
+                case 0x1:
+                    LOG_INST(ctx, "bne");
+                    if (ctx.reg[rs1] != ctx.reg[rs2]) {
+                        ctx.pc += Decoder::B_FMT_imm(instruction) - 4;
+                    }
+                    break;
+                case 0x4:
+                    LOG_INST(ctx, "blt");
+                    if (static_cast<int32_t>(ctx.reg[rs1]) < static_cast<int32_t>(ctx.reg[rs2])) {
+                        ctx.pc += Decoder::B_FMT_imm(instruction) - 4;
+                    }
+                    break;
+                case 0x5:
+                    LOG_INST(ctx, "bge");
+                    if (static_cast<int32_t>(ctx.reg[rs1]) >= static_cast<int32_t>(ctx.reg[rs2])) {
+                        ctx.pc += Decoder::B_FMT_imm(instruction) - 4;
+                    }
+                    break;
+                case 0x6:
+                    LOG_INST(ctx, "bltu");
+                    if (ctx.reg[rs1] < ctx.reg[rs2]) {
+                        ctx.pc += Decoder::B_FMT_imm(instruction) - 4;
+                    }
+                    break;
+                case 0x7:
+                    LOG_INST(ctx, "bgeu");
+                    if (ctx.reg[rs1] >= ctx.reg[rs2]) {
+                        ctx.pc += Decoder::B_FMT_imm(instruction) - 4;
+                    }
+                    break;
+            }
+            break;
+        case 0b1101111:
+            LOG_INST(ctx, "jal");
+            ctx.reg[rd] = ctx.pc + 4;
+            ctx.pc += Decoder::J_FMT_imm(instruction) - 4;
+            break;
+        case 0b1100111:
+            if (funct3 == 0x0) {
+                LOG_JMP(ctx, Decoder::I_FMT_imm(instruction) + ctx.reg[rs1]);
+                LOG_INST(ctx, "jalr");
+
+                ctx.reg[rd] = ctx.pc + 4;
+                ctx.pc = Decoder::I_FMT_imm(instruction) + ctx.reg[rs1] - 4;
+                break;
+            }
+        case 0b0110111:
+            ctx.reg[rd] = Decoder::U_FMT_imm(instruction) << 12;
+            LOG_INST(ctx, "lui");
+            break;
+        case 0b0010111:
+            ctx.reg[rd] = ctx.pc + (Decoder::U_FMT_imm(instruction) << 12);
+            LOG_INST(ctx, "auipc");
+            break;
+        case 0b1110011:
+            if (funct3 == 0x0 && Decoder::I_FMT_imm(instruction) == 0x0) {
+                LOG_INST(ctx, "ecall");
+                Syscall::handle(ctx);
+            }
+            break;
+        case 0b0101111:
+            switch (funct3) {
+                case 0x2:
+                    if (Decoder::getFunct5(instruction) == 0x02) {
+                        ctx.reg[rd] = ctx.memory.read<int32_t>(ctx.reg[rs1]);
+                        LOG_INST(ctx, "lr.w");
+                    } else if (Decoder::getFunct5(instruction) == 0x03) {
+                        ctx.memory.write<uint32_t>(ctx.reg[rs1], ctx.reg[rs2]);
+                        ctx.reg[rd] = 0; // success
+                        LOG_INST(ctx, "sc.w");
+                    }
+                    break;
+            }
+            break;
+        default:
+            printf("Unsupported base opcode at 0x%08x\n", ctx.pc);
+            break;
+    }
+
+    ctx.pc += 4;
+    ctx.reg[x0] = 0;
+}
+
 void Interpreter::logInstruction(Context& ctx, std::string_view name) {
     if (activeProfilingInfo) {
         activeProfilingInfo->incrementInstructionCount(name);

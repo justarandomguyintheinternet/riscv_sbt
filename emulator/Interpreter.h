@@ -14,6 +14,8 @@ namespace Interpreter {
 
     void runInstruction(Context& ctx);
     void runInstruction(Context& ctx, uint32_t instruction);
+    void runInstructionSwitch(Context& ctx);
+    void runInstructionSwitch(Context& ctx, uint32_t instruction);
     void logInstruction(Context& ctx, std::string_view name);
     void logJump(Context& ctx, uint32_t target);
 }

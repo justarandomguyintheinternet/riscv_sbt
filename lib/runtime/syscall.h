@@ -3,12 +3,12 @@
 
 #include <cassert>
 #include <runtime/Context.h>
-#include <cstdlib>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <ctime>
 #include <sys/mman.h>
+#include <functional>
 
 #include "registers.h"
 
@@ -16,9 +16,11 @@ namespace Syscall {
     void handle(Context& ctx);
     void handle(Context& ctx, uint32_t num);
     void handleError(Context& ctx);
+    inline std::vector<std::function<void()>> exitCallbacks;
 
     // Specific handlers, inline small ones (?)
     inline void _exit(Context& ctx) {
+        for (auto& callback : exitCallbacks) { callback(); }
         exit(static_cast<uint8_t>(ctx.reg[a0]));
     };
 
