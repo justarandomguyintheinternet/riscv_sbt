@@ -172,8 +172,17 @@ const ProfilingInfo::InstructionCounts& ProfilingInfo::getInstructionCounts() co
     return instructionCounts;
 }
 
-const ProfilingInfo::IndirectBranchTargets& ProfilingInfo::getIndirectBranchTargets() const {
+const ProfilingInfo::IndirectBranchTargets& ProfilingInfo::getAllBranchTargets() const {
     return indirectBranchTargets;
+}
+
+const ProfilingInfo::BranchDestinations& ProfilingInfo::getIndirectBranchTargets(uint32_t branchAddress) const {
+    auto it = indirectBranchTargets.find(branchAddress);
+    if (it != indirectBranchTargets.end()) {
+        return it->second;
+    }
+    static const ProfilingInfo::BranchDestinations emptyDestinations;
+    return emptyDestinations;
 }
 
 void ProfilingInfo::openFile() {

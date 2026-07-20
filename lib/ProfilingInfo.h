@@ -28,7 +28,8 @@ public:
 
     const std::filesystem::path& getFilePath() const;
     const InstructionCounts& getInstructionCounts() const;
-    const IndirectBranchTargets& getIndirectBranchTargets() const;
+    const IndirectBranchTargets& getAllBranchTargets() const;
+    const BranchDestinations& getIndirectBranchTargets(uint32_t branchAddress) const;
 
 private:
     std::filesystem::path filePath;
