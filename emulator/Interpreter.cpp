@@ -627,6 +627,635 @@ void Interpreter::runInstructionSwitch(Context &ctx, uint32_t instruction) {
     ctx.reg[x0] = 0;
 }
 
+void Interpreter::runInstructionPredecoded(Context& ctx, Instruction& instruction) {
+    switch (instruction.type) {
+        case EInstruction::ADD:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] + ctx.reg[instruction.rs2];
+            LOG_INST(ctx, "add");
+            break;
+        case EInstruction::SUB:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] - ctx.reg[instruction.rs2];
+            LOG_INST(ctx, "sub");
+            break;
+        case EInstruction::XOR:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] ^ ctx.reg[instruction.rs2];
+            LOG_INST(ctx, "xor");
+            break;
+        case EInstruction::OR:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] | ctx.reg[instruction.rs2];
+            LOG_INST(ctx, "or");
+            break;
+        case EInstruction::AND:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] & ctx.reg[instruction.rs2];
+            LOG_INST(ctx, "and");
+            break;
+        case EInstruction::SLL:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] << (ctx.reg[instruction.rs2] & 0x1f);
+            LOG_INST(ctx, "sll");
+            break;
+        case EInstruction::SRL:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] >> (ctx.reg[instruction.rs2] & 0x1f);
+            LOG_INST(ctx, "srl");
+            break;
+        case EInstruction::SRA: {
+            uint8_t shift = static_cast<uint8_t>(ctx.reg[instruction.rs2] & 0x1f);
+            ctx.reg[instruction.rd] = static_cast<uint32_t>(static_cast<int32_t>(ctx.reg[instruction.rs1]) >> shift);
+            LOG_INST(ctx, "sra");
+            break;
+        }
+        case EInstruction::SLT:
+            ctx.reg[instruction.rd] =
+                static_cast<int32_t>(ctx.reg[instruction.rs1]) < static_cast<int32_t>(ctx.reg[instruction.rs2]);
+            LOG_INST(ctx, "slt");
+            break;
+        case EInstruction::SLTU:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] < ctx.reg[instruction.rs2];
+            LOG_INST(ctx, "sltu");
+            break;
+        case EInstruction::ADDI:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] + instruction.immediate;
+            LOG_INST(ctx, "addi");
+            break;
+        case EInstruction::XORI:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] ^ instruction.immediate;
+            LOG_INST(ctx, "xori");
+            break;
+        case EInstruction::ORI:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] | instruction.immediate;
+            LOG_INST(ctx, "ori");
+            break;
+        case EInstruction::ANDI:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] & instruction.immediate;
+            LOG_INST(ctx, "andi");
+            break;
+        case EInstruction::SLLI:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] << static_cast<uint8_t>(instruction.immediate & 0x1f);
+            LOG_INST(ctx, "slli");
+            break;
+        case EInstruction::SRLI:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] >> static_cast<uint8_t>(instruction.immediate & 0x1f);
+            LOG_INST(ctx, "srli");
+            break;
+        case EInstruction::SRAI: {
+            uint8_t shift = static_cast<uint8_t>(instruction.immediate & 0x1f);
+            ctx.reg[instruction.rd] = static_cast<uint32_t>(static_cast<int32_t>(ctx.reg[instruction.rs1]) >> shift);
+            LOG_INST(ctx, "srai");
+            break;
+        }
+        case EInstruction::SLTI:
+            ctx.reg[instruction.rd] = static_cast<int32_t>(ctx.reg[instruction.rs1]) < instruction.immediate;
+            LOG_INST(ctx, "slti");
+            break;
+        case EInstruction::SLTIU:
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] < static_cast<uint32_t>(instruction.immediate);
+            LOG_INST(ctx, "sltiu");
+            break;
+        case EInstruction::LB: {
+            uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+            ctx.reg[instruction.rd] = static_cast<int32_t>(ctx.memory.read<int8_t>(address));
+            LOG_INST(ctx, "lb");
+            break;
+        }
+        case EInstruction::LH: {
+            uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+            ctx.reg[instruction.rd] = static_cast<int32_t>(ctx.memory.read<int16_t>(address));
+            LOG_INST(ctx, "lh");
+            break;
+        }
+        case EInstruction::LW: {
+            uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+            ctx.reg[instruction.rd] = ctx.memory.read<int32_t>(address);
+            LOG_INST(ctx, "lw");
+            break;
+        }
+        case EInstruction::LBU: {
+            uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+            ctx.reg[instruction.rd] = ctx.memory.read<uint8_t>(address);
+            LOG_INST(ctx, "lbu");
+            break;
+        }
+        case EInstruction::LHU: {
+            uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+            ctx.reg[instruction.rd] = ctx.memory.read<uint16_t>(address);
+            LOG_INST(ctx, "lhu");
+            break;
+        }
+        case EInstruction::SB: {
+            uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+            ctx.memory.write<uint8_t>(address, ctx.reg[instruction.rs2]);
+            LOG_INST(ctx, "sb");
+            break;
+        }
+        case EInstruction::SH: {
+            uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+            ctx.memory.write<uint16_t>(address, ctx.reg[instruction.rs2]);
+            LOG_INST(ctx, "sh");
+            break;
+        }
+        case EInstruction::SW: {
+            uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+            ctx.memory.write<uint32_t>(address, ctx.reg[instruction.rs2]);
+            LOG_INST(ctx, "sw");
+            break;
+        }
+        case EInstruction::BEQ:
+            LOG_INST(ctx, "beq");
+            if (ctx.reg[instruction.rs1] == ctx.reg[instruction.rs2]) {
+                ctx.pc += instruction.immediate - 4;
+            }
+            break;
+        case EInstruction::BNE:
+            LOG_INST(ctx, "bne");
+            if (ctx.reg[instruction.rs1] != ctx.reg[instruction.rs2]) {
+                ctx.pc += instruction.immediate - 4;
+            }
+            break;
+        case EInstruction::BLT:
+            LOG_INST(ctx, "blt");
+            if (static_cast<int32_t>(ctx.reg[instruction.rs1]) < static_cast<int32_t>(ctx.reg[instruction.rs2])) {
+                ctx.pc += instruction.immediate - 4;
+            }
+            break;
+        case EInstruction::BGE:
+            LOG_INST(ctx, "bge");
+            if (static_cast<int32_t>(ctx.reg[instruction.rs1]) >= static_cast<int32_t>(ctx.reg[instruction.rs2])) {
+                ctx.pc += instruction.immediate - 4;
+            }
+            break;
+        case EInstruction::BLTU:
+            LOG_INST(ctx, "bltu");
+            if (ctx.reg[instruction.rs1] < ctx.reg[instruction.rs2]) {
+                ctx.pc += instruction.immediate - 4;
+            }
+            break;
+        case EInstruction::BGEU:
+            LOG_INST(ctx, "bgeu");
+            if (ctx.reg[instruction.rs1] >= ctx.reg[instruction.rs2]) {
+                ctx.pc += instruction.immediate - 4;
+            }
+            break;
+        case EInstruction::JAL:
+            LOG_INST(ctx, "jal");
+            ctx.reg[instruction.rd] = ctx.pc + 4;
+            ctx.pc += instruction.immediate - 4;
+            break;
+        case EInstruction::JALR:
+            LOG_JMP(ctx, instruction.immediate + ctx.reg[instruction.rs1]);
+            LOG_INST(ctx, "jalr");
+            ctx.reg[instruction.rd] = ctx.pc + 4;
+            ctx.pc = instruction.immediate + ctx.reg[instruction.rs1] - 4;
+            break;
+        case EInstruction::LUI:
+            ctx.reg[instruction.rd] = static_cast<uint32_t>(instruction.immediate) << 12;
+            LOG_INST(ctx, "lui");
+            break;
+        case EInstruction::AUIPC:
+            ctx.reg[instruction.rd] = ctx.pc + (static_cast<uint32_t>(instruction.immediate) << 12);
+            LOG_INST(ctx, "auipc");
+            break;
+        case EInstruction::ECALL:
+            LOG_INST(ctx, "ecall");
+            Syscall::handle(ctx);
+            break;
+        case EInstruction::EBREAK:
+            printf("Unsupported instruction at 0x%08x\n", ctx.pc);
+            break;
+        case EInstruction::FENCE:
+            printf("Unsupported instruction at 0x%08x\n", ctx.pc);
+            break;
+        case EInstruction::MUL:
+            ctx.reg[instruction.rd] =
+                static_cast<uint64_t>(ctx.reg[instruction.rs1]) * static_cast<uint64_t>(ctx.reg[instruction.rs2]) &
+                0xFFFFFFFF;
+            LOG_INST(ctx, "mul");
+            break;
+        case EInstruction::MULH:
+            ctx.reg[instruction.rd] =
+                (static_cast<int64_t>(static_cast<int32_t>(ctx.reg[instruction.rs1])) *
+                 static_cast<int64_t>(static_cast<int32_t>(ctx.reg[instruction.rs2]))) >>
+                32;
+            LOG_INST(ctx, "mulh");
+            break;
+        case EInstruction::MULHSU:
+            ctx.reg[instruction.rd] =
+                (static_cast<int64_t>(static_cast<int32_t>(ctx.reg[instruction.rs1])) *
+                 static_cast<uint64_t>(ctx.reg[instruction.rs2])) >>
+                32;
+            LOG_INST(ctx, "mulhsu");
+            break;
+        case EInstruction::MULHU:
+            ctx.reg[instruction.rd] =
+                (static_cast<uint64_t>(ctx.reg[instruction.rs1]) * static_cast<uint64_t>(ctx.reg[instruction.rs2])) >>
+                32;
+            LOG_INST(ctx, "mulhu");
+            break;
+        case EInstruction::DIV:
+            if (ctx.reg[instruction.rs2] == 0) {
+                ctx.reg[instruction.rd] = -1;
+            } else if (ctx.reg[instruction.rs1] == 0x80000000 && ctx.reg[instruction.rs2] == 0xFFFFFFFF) {
+                ctx.reg[instruction.rd] = 0x80000000;
+            } else {
+                ctx.reg[instruction.rd] = static_cast<uint32_t>(
+                    static_cast<int32_t>(ctx.reg[instruction.rs1]) / static_cast<int32_t>(ctx.reg[instruction.rs2]));
+            }
+            LOG_INST(ctx, "div");
+            break;
+        case EInstruction::DIVU:
+            if (ctx.reg[instruction.rs2] == 0) {
+                ctx.reg[instruction.rd] = 0xFFFFFFFF;
+            } else {
+                ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] / ctx.reg[instruction.rs2];
+            }
+            LOG_INST(ctx, "divu");
+            break;
+        case EInstruction::REM:
+            if (ctx.reg[instruction.rs2] == 0) {
+                ctx.reg[instruction.rd] = ctx.reg[instruction.rs1];
+            } else if (ctx.reg[instruction.rs1] == 0x80000000 && ctx.reg[instruction.rs2] == 0xFFFFFFFF) {
+                ctx.reg[instruction.rd] = 0;
+            } else {
+                ctx.reg[instruction.rd] = static_cast<uint32_t>(
+                    static_cast<int32_t>(ctx.reg[instruction.rs1]) % static_cast<int32_t>(ctx.reg[instruction.rs2]));
+            }
+            LOG_INST(ctx, "rem");
+            break;
+        case EInstruction::REMU:
+            if (ctx.reg[instruction.rs2] == 0) {
+                ctx.reg[instruction.rd] = ctx.reg[instruction.rs1];
+            } else {
+                ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] % ctx.reg[instruction.rs2];
+            }
+            LOG_INST(ctx, "remu");
+            break;
+        case EInstruction::LR_W:
+            ctx.reg[instruction.rd] = ctx.memory.read<int32_t>(ctx.reg[instruction.rs1]);
+            LOG_INST(ctx, "lr.w");
+            break;
+        case EInstruction::SC_W:
+            ctx.memory.write<uint32_t>(ctx.reg[instruction.rs1], ctx.reg[instruction.rs2]);
+            ctx.reg[instruction.rd] = 0;
+            LOG_INST(ctx, "sc.w");
+            break;
+        case EInstruction::INVALID:
+            printf("Unsupported instruction at 0x%08x\n", ctx.pc);
+            break;
+    }
+
+    ctx.pc += 4;
+    ctx.reg[x0] = 0;
+}
+
+#define DIRECT_THREADING 1
+
+#if DIRECT_THREADING == 1
+#define DISPATCH() \
+do { \
+    ctx.pc += 4; \
+    ctx.reg[x0] = 0; \
+    instruction = instructions[(ctx.pc - textStartAddress) / 4]; \
+    goto *instruction.handler; \
+} while(0)
+#else
+#define DISPATCH() \
+    do { \
+    ctx.pc += 4; \
+    ctx.reg[x0] = 0; \
+    instruction = instructions[(ctx.pc - textStartAddress) / 4]; \
+    goto *dispatch[static_cast<uint8_t>(instruction.type)]; \
+    } while(0)
+#endif
+
+void Interpreter::runInstructionsThreaded(Context& ctx, std::vector<Instruction>& instructions, uint32_t textStartAddress) {
+    const static void* dispatch[] = {
+        &&L_ADD,
+        &&L_SUB,
+        &&L_XOR,
+        &&L_OR,
+        &&L_AND,
+        &&L_SLL,
+        &&L_SRL,
+        &&L_SRA,
+        &&L_SLT,
+        &&L_SLTU,
+        &&L_ADDI,
+        &&L_XORI,
+        &&L_ORI,
+        &&L_ANDI,
+        &&L_SLLI,
+        &&L_SRLI,
+        &&L_SRAI,
+        &&L_SLTI,
+        &&L_SLTIU,
+        &&L_LB,
+        &&L_LH,
+        &&L_LW,
+        &&L_LBU,
+        &&L_LHU,
+        &&L_SB,
+        &&L_SH,
+        &&L_SW,
+        &&L_BEQ,
+        &&L_BNE,
+        &&L_BLT,
+        &&L_BGE,
+        &&L_BLTU,
+        &&L_BGEU,
+        &&L_JAL,
+        &&L_JALR,
+        &&L_LUI,
+        &&L_AUIPC,
+        &&L_ECALL,
+        &&L_INVALID,
+        &&L_INVALID,
+        &&L_MUL,
+        &&L_MULH,
+        &&L_MULHSU,
+        &&L_MULHU,
+        &&L_DIV,
+        &&L_DIVU,
+        &&L_REM,
+        &&L_REMU,
+        &&L_LR_W,
+        &&L_SC_W,
+        &&L_INVALID
+    };
+
+#if DIRECT_THREADING == 1
+    // Must be done in here where the labels live, avoid lookup in dispatch table at runtime to allow for "proper" direct threading
+    for (auto& instruction : instructions) {
+        instruction.handler = dispatch[static_cast<uint8_t>(instruction.type)];
+    }
+#endif
+
+    Instruction& instruction = instructions[(ctx.pc - textStartAddress) / 4];
+    goto *dispatch[static_cast<uint8_t>(instruction.type)];
+
+    L_ADD:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] + ctx.reg[instruction.rs2];
+        LOG_INST(ctx, "add");
+        DISPATCH();
+    L_SUB:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] - ctx.reg[instruction.rs2];
+        LOG_INST(ctx, "sub");
+        DISPATCH();
+    L_XOR:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] ^ ctx.reg[instruction.rs2];
+        LOG_INST(ctx, "xor");
+        DISPATCH();
+    L_OR:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] | ctx.reg[instruction.rs2];
+        LOG_INST(ctx, "or");
+        DISPATCH();
+    L_AND:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] & ctx.reg[instruction.rs2];
+        LOG_INST(ctx, "and");
+        DISPATCH();
+    L_SLL:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] << (ctx.reg[instruction.rs2] & 0x1f);
+        LOG_INST(ctx, "sll");
+        DISPATCH();
+    L_SRL:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] >> (ctx.reg[instruction.rs2] & 0x1f);
+        LOG_INST(ctx, "srl");
+        DISPATCH();
+    L_SRA: {
+        uint8_t shift = static_cast<uint8_t>(ctx.reg[instruction.rs2] & 0x1f);
+        ctx.reg[instruction.rd] = static_cast<uint32_t>(static_cast<int32_t>(ctx.reg[instruction.rs1]) >> shift);
+        LOG_INST(ctx, "sra");
+        DISPATCH();
+    }
+    L_SLT:
+        ctx.reg[instruction.rd] =
+            static_cast<int32_t>(ctx.reg[instruction.rs1]) < static_cast<int32_t>(ctx.reg[instruction.rs2]);
+        LOG_INST(ctx, "slt");
+        DISPATCH();
+    L_SLTU:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] < ctx.reg[instruction.rs2];
+        LOG_INST(ctx, "sltu");
+        DISPATCH();
+    L_ADDI:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] + instruction.immediate;
+        LOG_INST(ctx, "addi");
+        DISPATCH();
+    L_XORI:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] ^ instruction.immediate;
+        LOG_INST(ctx, "xori");
+        DISPATCH();
+    L_ORI:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] | instruction.immediate;
+        LOG_INST(ctx, "ori");
+        DISPATCH();
+    L_ANDI:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] & instruction.immediate;
+        LOG_INST(ctx, "andi");
+        DISPATCH();
+    L_SLLI:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] << static_cast<uint8_t>(instruction.immediate & 0x1f);
+        LOG_INST(ctx, "slli");
+        DISPATCH();
+    L_SRLI:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] >> static_cast<uint8_t>(instruction.immediate & 0x1f);
+        LOG_INST(ctx, "srli");
+        DISPATCH();
+    L_SRAI: {
+        uint8_t shift = static_cast<uint8_t>(instruction.immediate & 0x1f);
+        ctx.reg[instruction.rd] = static_cast<uint32_t>(static_cast<int32_t>(ctx.reg[instruction.rs1]) >> shift);
+        LOG_INST(ctx, "srai");
+        DISPATCH();
+    }
+    L_SLTI:
+        ctx.reg[instruction.rd] = static_cast<int32_t>(ctx.reg[instruction.rs1]) < instruction.immediate;
+        LOG_INST(ctx, "slti");
+        DISPATCH();
+    L_SLTIU:
+        ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] < static_cast<uint32_t>(instruction.immediate);
+        LOG_INST(ctx, "sltiu");
+        DISPATCH();
+    L_LB: {
+        uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+        ctx.reg[instruction.rd] = static_cast<int32_t>(ctx.memory.read<int8_t>(address));
+        LOG_INST(ctx, "lb");
+        DISPATCH();
+    }
+    L_LH: {
+        uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+        ctx.reg[instruction.rd] = static_cast<int32_t>(ctx.memory.read<int16_t>(address));
+        LOG_INST(ctx, "lh");
+        DISPATCH();
+    }
+    L_LW: {
+        uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+        ctx.reg[instruction.rd] = ctx.memory.read<int32_t>(address);
+        LOG_INST(ctx, "lw");
+        DISPATCH();
+    }
+    L_LBU: {
+        uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+        ctx.reg[instruction.rd] = ctx.memory.read<uint8_t>(address);
+        LOG_INST(ctx, "lbu");
+        DISPATCH();
+    }
+    L_LHU: {
+        uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+        ctx.reg[instruction.rd] = ctx.memory.read<uint16_t>(address);
+        LOG_INST(ctx, "lhu");
+        DISPATCH();
+    }
+    L_SB: {
+        uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+        ctx.memory.write<uint8_t>(address, ctx.reg[instruction.rs2]);
+        LOG_INST(ctx, "sb");
+        DISPATCH();
+    }
+    L_SH: {
+        uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+        ctx.memory.write<uint16_t>(address, ctx.reg[instruction.rs2]);
+        LOG_INST(ctx, "sh");
+        DISPATCH();
+    }
+    L_SW: {
+        uint32_t address = ctx.reg[instruction.rs1] + instruction.immediate;
+        ctx.memory.write<uint32_t>(address, ctx.reg[instruction.rs2]);
+        LOG_INST(ctx, "sw");
+        DISPATCH();
+    }
+    L_BEQ:
+        LOG_INST(ctx, "beq");
+        if (ctx.reg[instruction.rs1] == ctx.reg[instruction.rs2]) {
+            ctx.pc += instruction.immediate - 4;
+        }
+        DISPATCH();
+    L_BNE:
+        LOG_INST(ctx, "bne");
+        if (ctx.reg[instruction.rs1] != ctx.reg[instruction.rs2]) {
+            ctx.pc += instruction.immediate - 4;
+        }
+        DISPATCH();
+    L_BLT:
+        LOG_INST(ctx, "blt");
+        if (static_cast<int32_t>(ctx.reg[instruction.rs1]) < static_cast<int32_t>(ctx.reg[instruction.rs2])) {
+            ctx.pc += instruction.immediate - 4;
+        }
+        DISPATCH();
+    L_BGE:
+        LOG_INST(ctx, "bge");
+        if (static_cast<int32_t>(ctx.reg[instruction.rs1]) >= static_cast<int32_t>(ctx.reg[instruction.rs2])) {
+            ctx.pc += instruction.immediate - 4;
+        }
+        DISPATCH();
+    L_BLTU:
+        LOG_INST(ctx, "bltu");
+        if (ctx.reg[instruction.rs1] < ctx.reg[instruction.rs2]) {
+            ctx.pc += instruction.immediate - 4;
+        }
+        DISPATCH();
+    L_BGEU:
+        LOG_INST(ctx, "bgeu");
+        if (ctx.reg[instruction.rs1] >= ctx.reg[instruction.rs2]) {
+            ctx.pc += instruction.immediate - 4;
+        }
+        DISPATCH();
+    L_JAL:
+        LOG_INST(ctx, "jal");
+        ctx.reg[instruction.rd] = ctx.pc + 4;
+        ctx.pc += instruction.immediate - 4;
+        DISPATCH();
+    L_JALR:
+        LOG_JMP(ctx, instruction.immediate + ctx.reg[instruction.rs1]);
+        LOG_INST(ctx, "jalr");
+        ctx.reg[instruction.rd] = ctx.pc + 4;
+        ctx.pc = instruction.immediate + ctx.reg[instruction.rs1] - 4;
+        DISPATCH();
+    L_LUI:
+        ctx.reg[instruction.rd] = static_cast<uint32_t>(instruction.immediate) << 12;
+        LOG_INST(ctx, "lui");
+        DISPATCH();
+    L_AUIPC:
+        ctx.reg[instruction.rd] = ctx.pc + (static_cast<uint32_t>(instruction.immediate) << 12);
+        LOG_INST(ctx, "auipc");
+        DISPATCH();
+    L_ECALL:
+        LOG_INST(ctx, "ecall");
+        Syscall::handle(ctx);
+        DISPATCH();
+    L_MUL:
+        ctx.reg[instruction.rd] =
+            static_cast<uint64_t>(ctx.reg[instruction.rs1]) * static_cast<uint64_t>(ctx.reg[instruction.rs2]) &
+            0xFFFFFFFF;
+        LOG_INST(ctx, "mul");
+        DISPATCH();
+    L_MULH:
+        ctx.reg[instruction.rd] =
+            (static_cast<int64_t>(static_cast<int32_t>(ctx.reg[instruction.rs1])) *
+             static_cast<int64_t>(static_cast<int32_t>(ctx.reg[instruction.rs2]))) >>
+            32;
+        LOG_INST(ctx, "mulh");
+        DISPATCH();
+    L_MULHSU:
+        ctx.reg[instruction.rd] =
+            (static_cast<int64_t>(static_cast<int32_t>(ctx.reg[instruction.rs1])) *
+             static_cast<uint64_t>(ctx.reg[instruction.rs2])) >>
+            32;
+        LOG_INST(ctx, "mulhsu");
+        DISPATCH();
+    L_MULHU:
+        ctx.reg[instruction.rd] =
+            (static_cast<uint64_t>(ctx.reg[instruction.rs1]) * static_cast<uint64_t>(ctx.reg[instruction.rs2])) >>
+            32;
+        LOG_INST(ctx, "mulhu");
+        DISPATCH();
+    L_DIV:
+        if (ctx.reg[instruction.rs2] == 0) {
+            ctx.reg[instruction.rd] = -1;
+        } else if (ctx.reg[instruction.rs1] == 0x80000000 && ctx.reg[instruction.rs2] == 0xFFFFFFFF) {
+            ctx.reg[instruction.rd] = 0x80000000;
+        } else {
+            ctx.reg[instruction.rd] = static_cast<uint32_t>(
+                static_cast<int32_t>(ctx.reg[instruction.rs1]) / static_cast<int32_t>(ctx.reg[instruction.rs2]));
+        }
+        LOG_INST(ctx, "div");
+        DISPATCH();
+    L_DIVU:
+        if (ctx.reg[instruction.rs2] == 0) {
+            ctx.reg[instruction.rd] = 0xFFFFFFFF;
+        } else {
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] / ctx.reg[instruction.rs2];
+        }
+        LOG_INST(ctx, "divu");
+        DISPATCH();
+    L_REM:
+        if (ctx.reg[instruction.rs2] == 0) {
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1];
+        } else if (ctx.reg[instruction.rs1] == 0x80000000 && ctx.reg[instruction.rs2] == 0xFFFFFFFF) {
+            ctx.reg[instruction.rd] = 0;
+        } else {
+            ctx.reg[instruction.rd] = static_cast<uint32_t>(
+                static_cast<int32_t>(ctx.reg[instruction.rs1]) % static_cast<int32_t>(ctx.reg[instruction.rs2]));
+        }
+        LOG_INST(ctx, "rem");
+        DISPATCH();
+    L_REMU:
+        if (ctx.reg[instruction.rs2] == 0) {
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1];
+        } else {
+            ctx.reg[instruction.rd] = ctx.reg[instruction.rs1] % ctx.reg[instruction.rs2];
+        }
+        LOG_INST(ctx, "remu");
+        DISPATCH();
+    L_LR_W:
+        ctx.reg[instruction.rd] = ctx.memory.read<int32_t>(ctx.reg[instruction.rs1]);
+        LOG_INST(ctx, "lr.w");
+        DISPATCH();
+    L_SC_W:
+        ctx.memory.write<uint32_t>(ctx.reg[instruction.rs1], ctx.reg[instruction.rs2]);
+        ctx.reg[instruction.rd] = 0;
+        LOG_INST(ctx, "sc.w");
+        DISPATCH();
+    L_INVALID:
+        printf("Unsupported instruction at 0x%08x\n", ctx.pc);
+        DISPATCH();
+}
+
 void Interpreter::logInstruction(Context& ctx, std::string_view name) {
     if (activeProfilingInfo) {
         activeProfilingInfo->incrementInstructionCount(name);

@@ -3,6 +3,7 @@
 
 #include <runtime/Context.h>
 #include <ProfilingInfo.h>
+#include "decoding/Decoder.h"
 
 #ifndef RISCV_EMU_PROFILING
     #define RISCV_EMU_PROFILING 0
@@ -16,6 +17,8 @@ namespace Interpreter {
     void runInstruction(Context& ctx, uint32_t instruction);
     void runInstructionSwitch(Context& ctx);
     void runInstructionSwitch(Context& ctx, uint32_t instruction);
+    void runInstructionPredecoded(Context& ctx, Instruction& instruction);
+    void runInstructionsThreaded(Context& ctx, std::vector<Instruction>& instructions, uint32_t textStartAddress);
     void logInstruction(Context& ctx, std::string_view name);
     void logJump(Context& ctx, uint32_t target);
 }

@@ -1,6 +1,7 @@
 #include <cstring>
 #include <iostream>
 #include <iomanip>
+#include <unordered_map>
 
 #include "elf/ElfBinary.h"
 #include "runtime/Memory.h"
@@ -8,6 +9,11 @@
 #include "ProfilingInfo.h"
 
 #define BASE_RA 0xdeadbeef
+
+#define PREDECODE 1
+#define THREADING 1
+// #define DIRECT_THREADING 1 Located in Interpreter.cpp
+#define SWITCH 0
 
 Memory memory;
 ProfilingInfo info("./profiling.json", true);
@@ -62,8 +68,37 @@ int main(int argc, char** argv, char** envp) {
 
     Interpreter::activeProfilingInfo = &info;
 
+#ifdef PREDECODE
+    auto text = binary.getTypeSections(ElfBinarySection::Text);
+    uint32_t textSize = 0; // Sum of the size of all sections which are executable, size counts uint32_t's
+    uint32_t textStartAddress = 1 << 31; // Lowest start address among executable sections, used for calculating zero based pc (To make dispatch array more compact)
+
+    for (const auto& ref : text) {
+        textSize += ref.get().getSize();
+        textStartAddress = std::min(textStartAddress, ref.get().getStartAddress());
+    }
+
+    std::vector<Instruction> instructions(textSize);
+
+    std::vector<Instruction> iVec;
+    binary.decodeToContainer(iVec);
+    for (auto inst : iVec) {
+        instructions[(inst.address - textStartAddress) / 4] = inst;
+    }
+#endif
+
     while (true) {
+#if PREDECODE == 1
+    #if THREADING == 1
+            Interpreter::runInstructionsThreaded(ctx, instructions, textStartAddress);
+    #else
+            Interpreter::runInstructionPredecoded(ctx, instructions[(ctx.pc - textStartAddress) / 4]);
+    #endif
+#elif SWITCH == 1
+        Interpreter::runInstructionSwitch(ctx);
+#else
         Interpreter::runInstruction(ctx);
+#endif
 
         // baremetal return without exit syscall
         if (ctx.pc == BASE_RA) {
