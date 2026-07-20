@@ -1,24 +1,26 @@
 #ifndef RISCV_TOOLS_PROFILINGINFO_H
 #define RISCV_TOOLS_PROFILINGINFO_H
 
+#include "decoding/Instructions.h"
+
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <string>
-#include <string_view>
 #include <unordered_map>
-#include <vector>
 
 class ProfilingInfo {
 public:
-    using InstructionCounts = std::unordered_map<std::string, uint64_t>;
-    using IndirectBranchTargets = std::unordered_map<uint32_t, std::vector<uint32_t>>;
+    using InstructionCounts = std::array<uint64_t, static_cast<std::size_t>(EInstruction::TYPE_COUNT)>;
+    using BranchDestinations = std::unordered_map<uint32_t, uint64_t>;
+    using IndirectBranchTargets = std::unordered_map<uint32_t, BranchDestinations>;
 
     explicit ProfilingInfo(std::filesystem::path filePath, bool appendMode = false);
     ~ProfilingInfo() {
         save();
     };
 
-    void incrementInstructionCount(std::string_view instructionName);
+    void incrementInstructionCount(EInstruction instruction);
     void recordIndirectBranch(uint32_t branchAddress, uint32_t destinationAddress);
 
     void load();

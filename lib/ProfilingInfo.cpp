@@ -1,6 +1,6 @@
 #include "ProfilingInfo.h"
 
-#include <algorithm>
+#include <array>
 #include <iomanip>
 #include <ios>
 #include <sstream>
@@ -10,6 +10,16 @@
 using json = nlohmann::json;
 
 namespace {
+    constexpr std::array<std::string_view, static_cast<std::size_t>(EInstruction::TYPE_COUNT)> InstructionNames = {
+            "ADD", "SUB", "XOR", "OR", "AND", "SLL", "SRL", "SRA", "SLT", "SLTU",
+            "ADDI", "XORI", "ORI", "ANDI", "SLLI", "SRLI", "SRAI", "SLTI", "SLTIU",
+            "LB", "LH", "LW", "LBU", "LHU", "SB", "SH", "SW",
+            "BEQ", "BNE", "BLT", "BGE", "BLTU", "BGEU",
+            "JAL", "JALR", "LUI", "AUIPC", "ECALL", "EBREAK", "FENCE",
+            "MUL", "MULH", "MULHSU", "MULHU", "DIV", "DIVU", "REM", "REMU",
+            "LR_W", "SC_W", "INVALID"
+    };
+
     std::string formatAddress(uint32_t address) {
         std::ostringstream stream;
         stream << "0x" << std::hex << std::setw(8) << std::setfill('0') << address;
@@ -18,6 +28,24 @@ namespace {
 
     uint32_t parseAddress(const std::string& value) {
         return static_cast<uint32_t>(std::stoul(value, nullptr, 0));
+    }
+
+    std::size_t toIndex(EInstruction instruction) {
+        return static_cast<std::size_t>(instruction);
+    }
+
+    std::string_view instructionName(EInstruction instruction) {
+        return InstructionNames[toIndex(instruction)];
+    }
+
+    EInstruction parseInstructionName(const std::string& name) {
+        for (std::size_t index = 0; index < InstructionNames.size(); ++index) {
+            if (InstructionNames[index] == name) {
+                return static_cast<EInstruction>(index);
+            }
+        }
+
+        throw std::runtime_error("Unknown instruction name in profiling data: " + name);
     }
 }
 
@@ -29,21 +57,18 @@ ProfilingInfo::ProfilingInfo(std::filesystem::path filePath, bool appendMode)
     }
 }
 
-void ProfilingInfo::incrementInstructionCount(std::string_view instructionName) {
-    instructionCounts[std::string(instructionName)]++;
+void ProfilingInfo::incrementInstructionCount(EInstruction instruction) {
+    instructionCounts[toIndex(instruction)]++;
 }
 
 void ProfilingInfo::recordIndirectBranch(uint32_t branchAddress, uint32_t destinationAddress) {
-    auto& destinations = indirectBranchTargets[branchAddress];
-    if (std::find(destinations.begin(), destinations.end(), destinationAddress) == destinations.end()) {
-        destinations.push_back(destinationAddress);
-    }
+    indirectBranchTargets[branchAddress][destinationAddress]++;
 }
 
 void ProfilingInfo::load() {
     openFile();
 
-    instructionCounts.clear();
+    instructionCounts.fill(0);
     indirectBranchTargets.clear();
     hasLoadedExistingData = false;
 
@@ -60,16 +85,36 @@ void ProfilingInfo::load() {
     const auto data = json::parse(file);
 
     if (data.contains("instruction_counts")) {
-        instructionCounts = data.at("instruction_counts").get<InstructionCounts>();
+        for (const auto& [name, count] : data.at("instruction_counts").items()) {
+            instructionCounts[toIndex(parseInstructionName(name))] = count.get<uint64_t>();
+        }
     }
 
     if (data.contains("indirect_branch_targets")) {
         for (const auto& [branchAddress, destinations] : data.at("indirect_branch_targets").items()) {
-            indirectBranchTargets[parseAddress(branchAddress)] = destinations.get<std::vector<uint32_t>>();
+            auto& destinationCounts = indirectBranchTargets[parseAddress(branchAddress)];
+            if (destinations.is_array()) {
+                for (const auto& destination : destinations) {
+                    destinationCounts[destination.get<uint32_t>()]++;
+                }
+                continue;
+            }
+
+            for (const auto& [destinationAddress, count] : destinations.items()) {
+                destinationCounts[parseAddress(destinationAddress)] = count.get<uint64_t>();
+            }
         }
     }
 
-    hasLoadedExistingData = !instructionCounts.empty() || !indirectBranchTargets.empty();
+    hasLoadedExistingData = indirectBranchTargets.size() > 0;
+    if (!hasLoadedExistingData) {
+        for (uint64_t count : instructionCounts) {
+            if (count > 0) {
+                hasLoadedExistingData = true;
+                break;
+            }
+        }
+    }
 
     file.clear();
     file.seekg(0, std::ios::beg);
@@ -80,15 +125,29 @@ void ProfilingInfo::save() {
     json data;
     InstructionCounts persistedInstructionCounts = instructionCounts;
     if (appendMode && hasLoadedExistingData) {
-        for (auto& entry : persistedInstructionCounts) {
-            entry.second /= 2;
+        for (auto& count : persistedInstructionCounts) {
+            count /= 2;
         }
     }
-    data["instruction_counts"] = std::move(persistedInstructionCounts);
+
+    json serializedInstructionCounts = json::object();
+    for (std::size_t index = 0; index < persistedInstructionCounts.size(); ++index) {
+        const auto count = persistedInstructionCounts[index];
+        if (count == 0) {
+            continue;
+        }
+
+        serializedInstructionCounts[std::string(instructionName(static_cast<EInstruction>(index)))] = count;
+    }
+    data["instruction_counts"] = std::move(serializedInstructionCounts);
 
     json branchTargets = json::object();
     for (const auto& [branchAddress, destinations] : indirectBranchTargets) {
-        branchTargets[formatAddress(branchAddress)] = destinations;
+        json destinationCounts = json::object();
+        for (const auto& [destinationAddress, count] : destinations) {
+            destinationCounts[formatAddress(destinationAddress)] = count;
+        }
+        branchTargets[formatAddress(branchAddress)] = std::move(destinationCounts);
     }
     data["indirect_branch_targets"] = std::move(branchTargets);
 

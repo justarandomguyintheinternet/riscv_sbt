@@ -19,14 +19,14 @@ namespace Interpreter {
     void runInstructionSwitch(Context& ctx, uint32_t instruction);
     void runInstructionPredecoded(Context& ctx, Instruction& instruction);
     void runInstructionsThreaded(Context& ctx, std::vector<Instruction>& instructions, uint32_t textStartAddress);
-    void logInstruction(Context& ctx, std::string_view name);
+    void logInstruction(Context& ctx, EInstruction type);
     void logJump(Context& ctx, uint32_t target);
 }
 
-#define LOG_INST(ctx, name) \
+#define LOG_INST(ctx, type) \
     do { \
         if constexpr (Interpreter::profileInstructions) { \
-            Interpreter::logInstruction(ctx, name); \
+            Interpreter::logInstruction(ctx, type); \
         } \
     } while (false)
 
