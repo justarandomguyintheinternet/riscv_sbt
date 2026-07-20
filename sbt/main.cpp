@@ -7,6 +7,9 @@
 
 #include "runtime/registers.h"
 
+#define PROFILE_INDIRECT 0
+#define TRANSLATION_CHAINING 1
+
 std::vector<Instruction> instructions;
 const Instruction* current;
 uint8_t indent = 0;
@@ -15,7 +18,7 @@ std::ofstream output;
 uint32_t reg_values[32];
 bool reg_known[32];
 
-#define BASE_RA 0xdeadbeef
+#define BASE_RA 0xdeadbeef // Used for baremetal, not compatible with translation chaining
 #define MULTILINE(...) #__VA_ARGS__
 
 std::string REG(InstructionField field) {
@@ -126,7 +129,7 @@ void resetTracked() {
     }
 }
 
-void emitInstruction(const Instruction& instruction, bool isLeader) {
+void emitInstruction(const Instruction& instruction, bool isLeader, uint32_t textStartAddress) {
     indent = 2;
     if (isLeader) {
         emit(std::format("L{:X}:\n", instruction.address));
@@ -276,8 +279,16 @@ void emitInstruction(const Instruction& instruction, bool isLeader) {
         case EInstruction::JALR:
             emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
             emit(std::format("ctx.pc = {} + {};\n", instruction.immediate, REG(RS1)));
+#if PROFILE_INDIRECT == 1 && !TRANSLATION_CHAINING == 1
             emit("timerActive = true; timer = __rdtsc();\n");
-            emit("continue;\n"); // todo: maybe add logic reading dispatch table directly here, avoids dispatch loop entirely
+#endif
+
+#if TRANSLATION_CHAINING == 1
+            emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
+            emit("\t\tgoto *dispatch[pcDispatchIndex];\n");
+#else
+            emit("continue;\n");
+#endif
             break;
         case EInstruction::LUI:
             emit(std::format("{} = {};\n", REG(RD), instruction.immediate << 12), instruction.rd);
@@ -426,17 +437,20 @@ int main(int argc, char** argv) {
     emit("#include <runtime/syscall.h>\n");
     emit("#include <runtime/Context.h>\n");
     emit("#include <Interpreter.h>\n");
+
+#if PROFILE_INDIRECT == 1 && !TRANSLATION_CHAINING == 1
     emit("#include <x86intrin.h>\n");
     emit("#pragma intrinsic(__rdtsc)\n\n");
 
-    emit("Memory memory;\n");
-    emit("Context ctx(memory);\n");
-
-    emit("\nbool timerActive = false;\n");
+    emit("bool timerActive = false;\n");
     emit("uint64_t cycles = 0;\n");
     emit("uint64_t timer = 0;\n");
     emit("uint64_t indirectMeasured = 0;\n");
-    emit("uint8_t heatup = 5;\n");
+    emit("uint8_t heatup = 5;\n\n");
+#endif
+
+    emit("Memory memory;\n");
+    emit("Context ctx(memory);\n");
 
     emitInfoPrint();
 
@@ -465,14 +479,16 @@ int main(int argc, char** argv) {
     emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
     emit("\t\tvoid* target = dispatch[pcDispatchIndex];\n");
 
+#if PROFILE_INDIRECT == 1 && !TRANSLATION_CHAINING == 1
     emit("\t\tif (timerActive && heatup == 0) {cycles += __rdtsc() - timer; timerActive = false; indirectMeasured++; printf(\"%llu\\n\", (unsigned long long)cycles); }\n");
     emit("\t\tif(heatup > 0) { heatup--; }\n");
+#endif
 
     emit("\t\tgoto *target;\n\n");
 
     // todo: maybe combine lui + addi into single load
     for (const auto& inst : instructions) {
-        emitInstruction(inst, leaders.contains(inst.address));
+        emitInstruction(inst, leaders.contains(inst.address), textStartAddress);
     }
 
     // Emulation fallback

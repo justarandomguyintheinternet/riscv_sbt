@@ -58,6 +58,7 @@ enum class EInstruction {
     LR_W,
     SC_W,
     INVALID,
+    TYPE_COUNT
 };
 
 enum class EInstructionFMT {
