@@ -497,7 +497,7 @@ int main(int argc, char** argv) {
     emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("\twhile(dispatch[pcDispatchIndex] == &&INVALID) {\n");
     emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
-    emit("\t\tInterpreter::runInstruction(ctx);\n\n");
+    emit("\t\tInterpreter::runInstructionSwitch(ctx);\n\n");
     emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
     emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
     emit("\t}\n");
