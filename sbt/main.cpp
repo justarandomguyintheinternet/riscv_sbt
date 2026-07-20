@@ -6,14 +6,19 @@
 #include <set>
 
 #include "runtime/registers.h"
+#include <ProfilingInfo.h>
+#include <ranges>
 
 #define PROFILE_INDIRECT 0
 #define TRANSLATION_CHAINING 1
+#define SOFTWARE_BRANCH_PREDICTION 1
+#define USE_PROFILING_DATA 1
 
 std::vector<Instruction> instructions;
 const Instruction* current;
 uint8_t indent = 0;
 std::ofstream output;
+ProfilingInfo profilingInfo("./profiling.json", true);
 
 uint32_t reg_values[32];
 bool reg_known[32];
@@ -129,9 +134,9 @@ void resetTracked() {
     }
 }
 
-void emitInstruction(const Instruction& instruction, bool isLeader, uint32_t textStartAddress) {
+void emitInstruction(const Instruction& instruction, std::set<uint32_t>& leaders, uint32_t textStartAddress) {
     indent = 2;
-    if (isLeader) {
+    if (leaders.contains(instruction.address)) {
         emit(std::format("L{:X}:\n", instruction.address));
         resetTracked();
     }
@@ -276,20 +281,37 @@ void emitInstruction(const Instruction& instruction, bool isLeader, uint32_t tex
             emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
             emit(std::format("goto L{:X};\n", instruction.address + instruction.immediate));
             break;
-        case EInstruction::JALR:
+        case EInstruction::JALR: {
             emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
             emit(std::format("ctx.pc = {} + {};\n", instruction.immediate, REG(RS1)));
 #if PROFILE_INDIRECT == 1 && !TRANSLATION_CHAINING == 1
             emit("timerActive = true; timer = __rdtsc();\n");
 #endif
 
+#if SOFTWARE_BRANCH_PREDICTION == 1
+            auto branchDestinations = profilingInfo.getIndirectBranchTargets(instruction.address);
+
+            // Hardcode top 3 most frequently used branches with direct targets
+            for (int i = 0; i < 3 && !branchDestinations.empty(); ++i) {
+                auto max_it = std::max_element(branchDestinations.begin(), branchDestinations.end(),
+                    [](const auto& a, const auto& b) { return a.second < b.second; });
+
+                if (leaders.contains(max_it->first)) {
+                    emit(std::format("if (ctx.pc == 0x{:X}) goto L{:X};\n", max_it->first, max_it->first));
+                }
+
+                branchDestinations.erase(max_it);
+            }
+#endif
+
 #if TRANSLATION_CHAINING == 1
-            emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
-            emit("\t\tgoto *dispatch[pcDispatchIndex];\n");
+            emit(std::format("pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
+            emit("goto *dispatch[pcDispatchIndex];\n");
 #else
             emit("continue;\n");
 #endif
             break;
+        }
         case EInstruction::LUI:
             emit(std::format("{} = {};\n", REG(RD), instruction.immediate << 12), instruction.rd);
             break;
@@ -397,6 +419,16 @@ std::set<uint32_t> getBasicBlocksLeaders(const std::vector<Instruction>& instruc
         }
     }
 
+#if USE_PROFILING_DATA == 1
+    auto branchTargets = profilingInfo.getAllBranchTargets();
+
+    for (const auto& [address, targets] : branchTargets) {
+        for (const auto& target : targets) {
+            leaders.insert(target.first);
+        }
+    }
+#endif
+
     return leaders;
 }
 
@@ -488,7 +520,7 @@ int main(int argc, char** argv) {
 
     // todo: maybe combine lui + addi into single load
     for (const auto& inst : instructions) {
-        emitInstruction(inst, leaders.contains(inst.address), textStartAddress);
+        emitInstruction(inst, leaders, textStartAddress);
     }
 
     // Emulation fallback
