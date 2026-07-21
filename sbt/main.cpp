@@ -9,10 +9,12 @@
 #include <ProfilingInfo.h>
 #include <ranges>
 
-#define PROFILE_INDIRECT 0
+#define PROFILE_INDIRECT 0 // Collect data on overhead of indirect branch handling, for now not compatible with translation chaining
 #define TRANSLATION_CHAINING 1
+
+// Requires presence of profiling data
 #define SOFTWARE_BRANCH_PREDICTION 1
-#define USE_PROFILING_DATA 1
+#define USE_PROFILING_DATA 0 // Use profiling data to supplement jump target identification
 
 std::vector<Instruction> instructions;
 const Instruction* current;
@@ -432,6 +434,23 @@ std::set<uint32_t> getBasicBlocksLeaders(const std::vector<Instruction>& instruc
     return leaders;
 }
 
+void harvestStaticData(ElfBinary& binary, std::set<uint32_t>& leaders, uint32_t textStart, uint32_t textEnd) {
+    auto sections = binary.getTypeSections(ElfBinarySection::Data);
+
+    uint32_t discovered = 0;
+
+    for (auto section : sections) {
+        for (auto address : section.get().getData()) {
+            if (address >= textStart && address < textEnd) {
+                discovered += !leaders.contains(address);
+                leaders.insert(address);
+            }
+        }
+    }
+
+    printf("Discovered %d potential jump targets from data sections\n", discovered);
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <elf binary> <output directory>" << std::endl;
@@ -448,21 +467,26 @@ int main(int argc, char** argv) {
     }
 
     binary.decodeToContainer(instructions);
-    std::set<uint32_t> leaders = getBasicBlocksLeaders(instructions);
 
+    // Calculate instructions address bounds
     auto text = binary.getTypeSections(ElfBinarySection::Text);
-    uint32_t textSize = 0; // Sum of the size of all sections which are executable
+    uint32_t textEndAddress = 0;
     uint32_t textStartAddress = 1 << 31; // Lowest start address among executable sections, used for calculating zero based pc (To make dispatch array more compact)
 
     for (const auto& ref : text) {
-        textSize += ref.get().getSize();
         textStartAddress = std::min(textStartAddress, ref.get().getStartAddress());
+        textEndAddress = std::max(textEndAddress, ref.get().getStartAddress() + ref.get().getSize());
     }
 
-    output.open(argc < 3 ? "./sbt/translated/src.cpp" : argv[2]);
+    uint32_t textSize = textEndAddress - textStartAddress; // Sum of the size of all sections which are executable, including potential gaps in between
+
+    // Try to recover as many jump targets as possible
+    std::set<uint32_t> leaders = getBasicBlocksLeaders(instructions);
+    harvestStaticData(binary, leaders, textStartAddress, textEndAddress);
 
     // Translated code emission start
 
+    output.open(argc < 3 ? "./sbt/translated/src.cpp" : argv[2]);
     emit("#include <iostream>\n");
     emit("#include <cstdint>\n");
     emit("#include <iomanip>\n");
@@ -526,14 +550,14 @@ int main(int argc, char** argv) {
     // Emulation fallback
     indent = 2;
     emit("INVALID: {\n");
-    emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    //emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("\twhile(dispatch[pcDispatchIndex] == &&INVALID) {\n");
-    emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    //emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("\t\tInterpreter::runInstructionSwitch(ctx);\n\n");
     emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
     emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
     emit("\t}\n");
-    emit("\tstd::cout << \"Switching back to translated code at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    //emit("\tstd::cout << \"Switching back to translated code at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("}\n");
     indent = 1;
     emit("}\n");

@@ -52,6 +52,7 @@ public:
     const std::vector<ElfBinarySection>& getSections() const { return sections; }
     std::vector<std::reference_wrapper<const ElfBinarySection>> getTypeSections(ElfBinarySection::SectionType type) const;
     std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(ElfBinarySection::SectionType type) const;
+    std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(std::string_view name) const;
     std::optional<uint32_t> getSymbolAddress(const char* symbolName) const;
     int32_t getEntryAddress() const;
 

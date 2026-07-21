@@ -173,6 +173,15 @@ std::optional<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getSect
     return std::nullopt;
 }
 
+std::optional<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getSection(std::string_view name) const {
+    for (const auto& section : sections) {
+        if (section.getName() == name) {
+            return section;
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<std::reference_wrapper<const ElfBinarySection>> ElfBinary::getTypeSections(ElfBinarySection::SectionType type) const {
     std::vector<std::reference_wrapper<const ElfBinarySection>> result;
 
