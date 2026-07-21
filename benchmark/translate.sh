@@ -6,7 +6,7 @@ if [ ! -d "bin/riscv" ]; then
 fi
 
 SBT_PROJECT_DIR="../sbt"
-SBT_BUILD_DIR="../cmake-build-debug-wsl"
+SBT_BUILD_DIR="../cmake-build-release-wsl"
 SBT_PATH="$SBT_BUILD_DIR/sbt/sbt"
 TRANSLATED_PROJECT_DIR="$SBT_PROJECT_DIR/translated"
 TRANSLATED_SOURCE="$TRANSLATED_PROJECT_DIR/src.cpp"
