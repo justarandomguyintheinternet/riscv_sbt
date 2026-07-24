@@ -13,7 +13,7 @@
 #define TRANSLATION_CHAINING 1
 
 // Requires presence of profiling data
-#define SOFTWARE_BRANCH_PREDICTION 1
+#define SOFTWARE_BRANCH_PREDICTION 0
 #define USE_PROFILING_DATA 0 // Use profiling data to supplement jump target identification
 
 std::vector<Instruction> instructions;
@@ -169,7 +169,7 @@ void emitInstruction(const Instruction& instruction, std::set<uint32_t>& leaders
             emit(std::format("{} = {} >> ({} & 0x1f);\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::SRA:
-            emit(std::format("{} = static_cast<uint32_t>(static_cast<int32_t>({}) >> {} & 0x1f);\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
+            emit(std::format("{} = static_cast<uint32_t>(static_cast<int32_t>({}) >> ({} & 0x1f));\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
             break;
         case EInstruction::SLT:
             emit(std::format("{} = static_cast<int32_t>({}) < static_cast<int32_t>({});\n", REG(RD), REG(RS1), REG(RS2)), instruction.rd);
@@ -550,14 +550,14 @@ int main(int argc, char** argv) {
     // Emulation fallback
     indent = 2;
     emit("INVALID: {\n");
-    //emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("\twhile(dispatch[pcDispatchIndex] == &&INVALID) {\n");
-    //emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("\t\tInterpreter::runInstructionSwitch(ctx);\n\n");
     emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
     emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
     emit("\t}\n");
-    //emit("\tstd::cout << \"Switching back to translated code at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    emit("\tstd::cout << \"Switching back to translated code at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("}\n");
     indent = 1;
     emit("}\n");

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 #define DATA_SIZE 0x80000
@@ -27,11 +28,14 @@ public:
 
     template<typename T>
     inline void write(uint32_t address, uint32_t value) {
-        *reinterpret_cast<T *>(&data[address]) = static_cast<T>(value);
+        T tmp = static_cast<T>(value);
+        std::memcpy(&data[address], &tmp, sizeof(T));
     };
     template<typename T>
     inline T read(uint32_t address) {
-        return *reinterpret_cast<T *>(&data[address]);
+        T tmp;
+        std::memcpy(&tmp, &data[address], sizeof(T));
+        return tmp;
     }; // Read the specified amount of data
 
     void loadAux(Auxiliary aux, bool skipSecondArg);
