@@ -1,5 +1,6 @@
 #include "ProfilingInfo.h"
 
+#include <algorithm>
 #include <array>
 #include <iomanip>
 #include <ios>
@@ -65,10 +66,23 @@ void ProfilingInfo::recordIndirectBranch(uint32_t branchAddress, uint32_t destin
     indirectBranchTargets[branchAddress][destinationAddress]++;
 }
 
+void ProfilingInfo::recordRegisterAccess(uint32_t rs1, uint32_t rs2, uint32_t rd) {
+    if (rs1 < RegisterCount) {
+        registerAccessCounts[rs1]++;
+    }
+    if (rs2 < RegisterCount) {
+        registerAccessCounts[rs2]++;
+    }
+    if (rd < RegisterCount) {
+        registerAccessCounts[rd]++;
+    }
+}
+
 void ProfilingInfo::load() {
     openFile();
 
     instructionCounts.fill(0);
+    registerAccessCounts.fill(0);
     indirectBranchTargets.clear();
     hasLoadedExistingData = false;
 
@@ -90,6 +104,14 @@ void ProfilingInfo::load() {
         }
     }
 
+    if (data.contains("register_accesses")) {
+        const auto& counts = data.at("register_accesses");
+        for (std::size_t index = 0; index < std::min(counts.size(), registerAccessCounts.size()); ++index) {
+            registerAccessCounts[index] = counts[index].get<uint64_t>();
+        }
+    }
+
+
     if (data.contains("indirect_branch_targets")) {
         for (const auto& [branchAddress, destinations] : data.at("indirect_branch_targets").items()) {
             auto& destinationCounts = indirectBranchTargets[parseAddress(branchAddress)];
@@ -108,12 +130,16 @@ void ProfilingInfo::load() {
 
     hasLoadedExistingData = indirectBranchTargets.size() > 0;
     if (!hasLoadedExistingData) {
-        for (uint64_t count : instructionCounts) {
-            if (count > 0) {
-                hasLoadedExistingData = true;
-                break;
+        const auto hasNonZeroCount = [](const auto& counts) {
+            for (uint64_t count : counts) {
+                if (count > 0) {
+                    return true;
+                }
             }
-        }
+            return false;
+        };
+
+        hasLoadedExistingData = hasNonZeroCount(instructionCounts) || hasNonZeroCount(registerAccessCounts);
     }
 
     file.clear();
@@ -140,6 +166,14 @@ void ProfilingInfo::save() {
         serializedInstructionCounts[std::string(instructionName(static_cast<EInstruction>(index)))] = count;
     }
     data["instruction_counts"] = std::move(serializedInstructionCounts);
+
+    RegisterCounts persistedRegisterCounts = registerAccessCounts;
+    if (appendMode && hasLoadedExistingData) {
+        for (auto& count : persistedRegisterCounts) {
+            count /= 2;
+        }
+    }
+    data["register_accesses"] = persistedRegisterCounts;
 
     json branchTargets = json::object();
     for (const auto& [branchAddress, destinations] : indirectBranchTargets) {
@@ -170,6 +204,10 @@ const std::filesystem::path& ProfilingInfo::getFilePath() const {
 
 const ProfilingInfo::InstructionCounts& ProfilingInfo::getInstructionCounts() const {
     return instructionCounts;
+}
+
+const ProfilingInfo::RegisterCounts& ProfilingInfo::getRegisterAccessCounts() const {
+    return registerAccessCounts;
 }
 
 const ProfilingInfo::IndirectBranchTargets& ProfilingInfo::getAllBranchTargets() const {

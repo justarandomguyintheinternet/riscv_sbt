@@ -21,6 +21,7 @@ namespace Interpreter {
     void runInstructionsThreaded(Context& ctx, std::vector<Instruction>& instructions, uint32_t textStartAddress);
     void logInstruction(Context& ctx, EInstruction type);
     void logJump(Context& ctx, uint32_t target);
+    void logRegister(uint32_t rs1, uint32_t rs2, uint32_t rd);
 }
 
 #define LOG_INST(ctx, type) \
@@ -34,6 +35,13 @@ namespace Interpreter {
     do { \
         if constexpr (Interpreter::profileInstructions) { \
             Interpreter::logJump(ctx, target); \
+        } \
+    } while (false)
+
+#define LOG_REG(rs1, rs2, rd) \
+    do { \
+        if constexpr (Interpreter::profileInstructions) { \
+            Interpreter::logRegister(rs1, rs2, rd); \
         } \
     } while (false)
 

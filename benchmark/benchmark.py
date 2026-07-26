@@ -75,6 +75,7 @@ def processRun(name, perf, runtime, command):
         with open('profiling.json', 'r', encoding='utf-8') as emuFile:
             emuData = json.load(emuFile)
         entry['instruction_counts'] = emuData['instruction_counts']
+        entry['register_accesses'] = emuData['register_accesses']
 
     return entry
 
@@ -143,7 +144,7 @@ for runIndex in range(args.num_runs):
         command.append(str(binaryName))
 
         if binaryName.name == 'coremark':
-            command.extend(['0x0', '0x0', '0x66', '50'])
+            command.extend(['0x0', '0x0', '0x66', '10'])
 
         completedProcess = subprocess.run(command, check=True, capture_output=True, text=True)
 
