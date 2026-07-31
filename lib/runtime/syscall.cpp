@@ -45,6 +45,14 @@ void Syscall::handle(Context& ctx, uint32_t num) {
             _munmap(ctx);
             break;
         }
+        case 220: { // clone, only used as fork here
+            _clone(ctx);
+            break;
+        }
+        case 221: {
+            _execve(ctx);
+            break;
+        }
         case 222: {
             _mmap(ctx);
             break;
@@ -59,6 +67,6 @@ void Syscall::handle(Context& ctx, uint32_t num) {
         }
         default:
             //std::cout << "Unknown ecall with code " << num << std::endl;
-            ctx.reg[a0] = -1;
+            ctx.reg[a0] = -22;
     }
 }

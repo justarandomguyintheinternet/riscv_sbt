@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <ctime>
+#include <sched.h>
 #include <sys/mman.h>
 #include <functional>
 
@@ -128,6 +129,62 @@ namespace Syscall {
             static_cast<struct statx*>(ctx.memory.getHostAddress(ctx.reg[a4])) // statx struct pointer to be written to
         );
 
+        handleError(ctx);
+    }
+
+    // guest argv/envp are arrays of 32-bit pointer, so convert them to 64-bit pointers
+    inline char* const* translatePointerArray(Context& ctx, uint32_t guestArrayAddress, std::vector<char*>& storage) {
+        if (guestArrayAddress == 0) { return nullptr; }
+
+        for (uint32_t address = guestArrayAddress; ; address += sizeof(uint32_t)) {
+            uint32_t entry = ctx.memory.read<uint32_t>(address); // "deref" pointer
+            if (entry == 0) { break; } // null terminated array of pointers to c-strings
+
+            storage.push_back(static_cast<char*>(ctx.memory.getHostAddress(entry))); // convert string pointer to host address, then get pointer to that
+        }
+        storage.push_back(nullptr);
+
+        return storage.data();
+    }
+
+    // https://man7.org/linux/man-pages/man2/execve.2.html
+    inline void _execve(Context& ctx) {
+        std::vector<char*> argv, envp;
+
+        // todo: for emulator maybe detect if its trying to run "itself", then invoke another emulator instance, otherwise execve might try to run rv32 binary
+
+        ctx.reg[a0] = execve(static_cast<const char*>(ctx.memory.getHostAddress(ctx.reg[a0])),
+               translatePointerArray(ctx, ctx.reg[a1], argv),
+               translatePointerArray(ctx, ctx.reg[a2], envp));
+
+        handleError(ctx);
+    }
+
+    // https://man7.org/linux/man-pages/man2/clone.2.html
+    // only support fork, as "real" clone would require too much work
+    inline void _clone(Context& ctx) {
+        uint32_t flags = ctx.reg[a0];
+        uint32_t childStack = ctx.reg[a1];
+
+        // reject everything that wants shared address space / memory like p_thread
+        if (childStack != 0 || (flags & (CLONE_VM | CLONE_THREAD | CLONE_SIGHAND))) {
+            ctx.reg[a0] = -22;
+            return;
+        }
+
+        pid_t pid = fork();
+
+        if (pid == 0) {
+            exitCallbacks.clear();
+
+            if (flags & CLONE_CHILD_SETTID) {
+                ctx.memory.write<uint32_t>(ctx.reg[a4], getpid());
+            }
+        } else if (pid > 0 && (flags & CLONE_PARENT_SETTID)) {
+            ctx.memory.write<uint32_t>(ctx.reg[a2], pid);
+        }
+
+        ctx.reg[a0] = pid;
         handleError(ctx);
     }
 }

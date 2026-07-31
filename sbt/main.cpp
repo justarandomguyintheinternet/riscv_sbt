@@ -221,7 +221,6 @@ void emitInstruction(const Instruction& instruction, std::set<uint32_t>& leaders
         case EInstruction::SLTIU:
             emit(std::format("{} = {} < {};\n", REG(RD), REG(RS1), static_cast<uint32_t>(instruction.immediate)), instruction.rd);
             break;
-        // todo: move memory functions to generic function
         case EInstruction::LB:
             emitLoadSaveAddress(instruction);
             emit(std::format("{} = static_cast<int32_t>(memory.read<int8_t>(address));\n", REG(RD)), instruction.rd);
@@ -327,6 +326,7 @@ void emitInstruction(const Instruction& instruction, std::set<uint32_t>& leaders
             } else {
                 emit(std::format("Syscall::handle(ctx, {});\n", reg_values[a7]));
             }
+            reg_known[a0] = false; // syscall return values gets written into a0
             break;
         case EInstruction::EBREAK:
         case EInstruction::FENCE:
@@ -542,7 +542,7 @@ int main(int argc, char** argv) {
 
     emit("\t\tgoto *target;\n\n");
 
-    // todo: maybe combine lui + addi into single load
+    // todo: peephole pass over `instructions` before emission, collapsing idiom sequences into simpler C
     for (const auto& inst : instructions) {
         emitInstruction(inst, leaders, textStartAddress);
     }
