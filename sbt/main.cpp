@@ -8,13 +8,18 @@
 #include "runtime/registers.h"
 #include <ProfilingInfo.h>
 #include <ranges>
+#include <algorithm>
 
-#define PROFILE_INDIRECT 0 // Collect data on overhead of indirect branch handling, for now not compatible with translation chaining
-#define TRANSLATION_CHAINING 1
+struct TranslationOptions {
+    bool profileIndirect = false; // Collect data on overhead of indirect branch handling, for now not compatible with translation chaining
+    bool translationChaining = true;
+    bool useProfilingData = false; // Use profiling data to supplement jump target identification
+    bool softwareBranchPrediction = false; // Requires presence of profiling data
+    bool pinCommonRegisters = true; // Statically pin PC and ctx base pointer to target registers
+    bool pinGPRs = false; // Pin most frequently used guest registers to host ones
+};
 
-// Requires presence of profiling data
-#define SOFTWARE_BRANCH_PREDICTION 0
-#define USE_PROFILING_DATA 0 // Use profiling data to supplement jump target identification
+TranslationOptions options;
 
 std::vector<Instruction> instructions;
 const Instruction* current;
@@ -285,32 +290,32 @@ void emitInstruction(const Instruction& instruction, std::set<uint32_t>& leaders
         case EInstruction::JALR: {
             emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
             emit(std::format("ctx.pc = {} + {};\n", instruction.immediate, REG(RS1)));
-#if PROFILE_INDIRECT == 1 && !TRANSLATION_CHAINING == 1
-            emit("timerActive = true; timer = __rdtsc();\n");
-#endif
-
-#if SOFTWARE_BRANCH_PREDICTION == 1
-            auto branchDestinations = profilingInfo.getIndirectBranchTargets(instruction.address);
-
-            // Hardcode top 3 most frequently used branches with direct targets
-            for (int i = 0; i < 3 && !branchDestinations.empty(); ++i) {
-                auto max_it = std::max_element(branchDestinations.begin(), branchDestinations.end(),
-                    [](const auto& a, const auto& b) { return a.second < b.second; });
-
-                if (leaders.contains(max_it->first)) {
-                    emit(std::format("if (ctx.pc == 0x{:X}) goto L{:X};\n", max_it->first, max_it->first));
-                }
-
-                branchDestinations.erase(max_it);
+            if (options.profileIndirect && !options.translationChaining) {
+                emit("timerActive = true; timer = __rdtsc();\n");
             }
-#endif
 
-#if TRANSLATION_CHAINING == 1
-            emit(std::format("pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
-            emit("goto *dispatch[pcDispatchIndex];\n");
-#else
-            emit("continue;\n");
-#endif
+            if (options.softwareBranchPrediction) {
+                auto branchDestinations = profilingInfo.getIndirectBranchTargets(instruction.address);
+
+                // Hardcode top 3 most frequently used branches with direct targets
+                for (int i = 0; i < 3 && !branchDestinations.empty(); ++i) {
+                    auto max_it = std::max_element(branchDestinations.begin(), branchDestinations.end(),
+                        [](const auto& a, const auto& b) { return a.second < b.second; });
+
+                    if (leaders.contains(max_it->first)) {
+                        emit(std::format("if (ctx.pc == 0x{:X}) goto L{:X};\n", max_it->first, max_it->first));
+                    }
+
+                    branchDestinations.erase(max_it);
+                }
+            }
+
+            if (options.translationChaining) {
+                emit(std::format("pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
+                emit("goto *dispatch[pcDispatchIndex];\n");
+            } else {
+                emit("continue;\n");
+            }
             break;
         }
         case EInstruction::LUI:
@@ -421,15 +426,15 @@ std::set<uint32_t> getBasicBlocksLeaders(const std::vector<Instruction>& instruc
         }
     }
 
-#if USE_PROFILING_DATA == 1
-    auto branchTargets = profilingInfo.getAllBranchTargets();
+    if (options.useProfilingData) {
+        auto branchTargets = profilingInfo.getAllBranchTargets();
 
-    for (const auto& [address, targets] : branchTargets) {
-        for (const auto& target : targets) {
-            leaders.insert(target.first);
+        for (const auto& [address, targets] : branchTargets) {
+            for (const auto& target : targets) {
+                leaders.insert(target.first);
+            }
         }
     }
-#endif
 
     return leaders;
 }
@@ -451,15 +456,44 @@ void harvestStaticData(ElfBinary& binary, std::set<uint32_t>& leaders, uint32_t 
     printf("Discovered %d potential jump targets from data sections\n", discovered);
 }
 
+std::vector<char*> parseArguments(int argc, char** argv) {
+    std::vector<char*> positional;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string_view arg = argv[i];
+
+        if (arg == "--no-translation-chaining") {
+            options.translationChaining = false;
+        } else if (arg == "--profile-indirect") {
+            options.profileIndirect = true;
+        } else if (arg == "--software-branch-prediction") {
+            options.softwareBranchPrediction = true;
+        } else if (arg == "--use-profiling-data") {
+            options.useProfilingData = true;
+        } else {
+            positional.push_back(argv[i]);
+        }
+    }
+
+    return positional;
+}
+
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <elf binary> <output directory>" << std::endl;
+    std::vector<char*> positional = parseArguments(argc, argv);
+
+    if (positional.empty()) {
+        std::cerr << "Usage: " << argv[0] << " <elf binary> [output directory] [options]\n"
+                   << "Options:\n"
+                   << "  --no-translation-chaining     Disable translation chaining between indirect jumps (default: enabled)\n"
+                   << "  --profile-indirect            Collect overhead data for indirect branch handling, requires --no-translation-chaining (default: disabled)\n"
+                   << "  --software-branch-prediction  Hardcode most frequent indirect branch targets using profiling data (default: disabled)\n"
+                   << "  --use-profiling-data          Use profiling data to supplement jump target identification (default: disabled)\n";
         return 1;
     }
 
     resetTracked();
 
-    ElfBinary binary(argv[1]);
+    ElfBinary binary(positional[0]);
 
     if (binary.load() != ElfBinary::Success) {
         std::cerr << "Failed to load elf binary" << std::endl;
@@ -486,7 +520,7 @@ int main(int argc, char** argv) {
 
     // Translated code emission start
 
-    output.open(argc < 3 ? "./sbt/translated/src.cpp" : argv[2]);
+    output.open(positional.size() < 2 ? "./sbt/translated/src.cpp" : positional[1]);
     emit("#include <iostream>\n");
     emit("#include <cstdint>\n");
     emit("#include <iomanip>\n");
@@ -494,16 +528,16 @@ int main(int argc, char** argv) {
     emit("#include <runtime/Context.h>\n");
     emit("#include <Interpreter.h>\n");
 
-#if PROFILE_INDIRECT == 1 && !TRANSLATION_CHAINING == 1
-    emit("#include <x86intrin.h>\n");
-    emit("#pragma intrinsic(__rdtsc)\n\n");
+    if (options.profileIndirect && !options.translationChaining) {
+        emit("#include <x86intrin.h>\n");
+        emit("#pragma intrinsic(__rdtsc)\n\n");
 
-    emit("bool timerActive = false;\n");
-    emit("uint64_t cycles = 0;\n");
-    emit("uint64_t timer = 0;\n");
-    emit("uint64_t indirectMeasured = 0;\n");
-    emit("uint8_t heatup = 5;\n\n");
-#endif
+        emit("bool timerActive = false;\n");
+        emit("uint64_t cycles = 0;\n");
+        emit("uint64_t timer = 0;\n");
+        emit("uint64_t indirectMeasured = 0;\n");
+        emit("uint8_t heatup = 5;\n\n");
+    }
 
     emit("Memory memory;\n");
     emit("Context ctx(memory);\n");
@@ -535,10 +569,10 @@ int main(int argc, char** argv) {
     emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
     emit("\t\tvoid* target = dispatch[pcDispatchIndex];\n");
 
-#if PROFILE_INDIRECT == 1 && !TRANSLATION_CHAINING == 1
-    emit("\t\tif (timerActive && heatup == 0) {cycles += __rdtsc() - timer; timerActive = false; indirectMeasured++; printf(\"%llu\\n\", (unsigned long long)cycles); }\n");
-    emit("\t\tif(heatup > 0) { heatup--; }\n");
-#endif
+    if (options.profileIndirect && !options.translationChaining) {
+        emit("\t\tif (timerActive && heatup == 0) {cycles += __rdtsc() - timer; timerActive = false; indirectMeasured++; printf(\"%llu\\n\", (unsigned long long)cycles); }\n");
+        emit("\t\tif(heatup > 0) { heatup--; }\n");
+    }
 
     emit("\t\tgoto *target;\n\n");
 
