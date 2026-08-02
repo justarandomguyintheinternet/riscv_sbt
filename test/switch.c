@@ -1,3 +1,5 @@
+// Force jump table creation to test jump target identification / fallback
+
 #include <stdio.h>
 
 int test_jump_table(int input, int a) {

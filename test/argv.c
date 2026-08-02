@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <elf.h>
 
 int main(int argc, char** argv, char** envp) {
 	for (int i = 0; i < argc; i++) {
@@ -8,9 +7,11 @@ int main(int argc, char** argv, char** envp) {
 
 	printf("\n\n");
 
+	size_t index = 0;
 	for (char **env = envp; *env != 0; env++) {
-    		char *thisEnv = *env;
-    		printf("%s\n", thisEnv);    
+		char *thisEnv = *env;
+		printf("envp[%zu]=%s\n", index, thisEnv);
+		index++;
   	}
 
 	return 0;
