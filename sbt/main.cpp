@@ -15,11 +15,22 @@ struct TranslationOptions {
     bool translationChaining = true;
     bool useProfilingData = false; // Use profiling data to supplement jump target identification
     bool softwareBranchPrediction = false; // Requires presence of profiling data
-    bool pinCommonRegisters = true; // Statically pin PC and ctx base pointer to target registers
-    bool pinGPRs = false; // Pin most frequently used guest registers to host ones
+    bool pinRegisters = false; // Pin most frequently used guest registers to host ones
 };
 
 TranslationOptions options;
+
+inline constexpr std::array<std::pair<int, std::string_view>, 6> x86RegisterMap = {{
+    {ra, "r8"}, {sp, "r9"}, {a5, "r10"}, {a4, "r11"}, {a0, "r12"}, {s0, "r13"}
+}};
+
+constexpr std::optional<std::string_view> getHostRegister(int sourceRegister) {
+    for (auto& [s, h] : x86RegisterMap) {
+        if (s == sourceRegister) return h;
+    }
+
+    return {};
+}
 
 std::vector<Instruction> instructions;
 const Instruction* current;
@@ -61,6 +72,11 @@ std::string REG(InstructionField field) {
 
     if (field != InstructionField::RD && reg_known[index]) {
         return std::format("{}", reg_values[index]);
+    }
+
+    auto mapped = getHostRegister(index);
+    if (options.pinRegisters && mapped.has_value()) {
+        return std::format("x{}", index);
     }
 
     return std::format("ctx.reg[{}]", index);
@@ -110,6 +126,30 @@ void emitLoadSaveAddress(const Instruction& instruction) {
         emit(std::format("address = {};\n", REG(RS1)));
     } else {
         emit(std::format("address = {} + {};\n", REG(RS1), instruction.immediate));
+    }
+}
+
+void emitPinnedRegisters() {
+    if (!options.pinRegisters) { return; }
+
+    for (auto& [s, h] : x86RegisterMap) {
+        emit(std::format("register uint32_t x{} asm (\"{}\");\n", s, h));
+    }
+}
+
+void emitRegisterStore() {
+    if (!options.pinRegisters) { return; }
+
+    for (auto& [s, h] : x86RegisterMap) {
+        emit(std::format("ctx.reg[{}] = x{};\n", s, s));
+    }
+}
+
+void emitRegisterLoad() {
+    if (!options.pinRegisters) { return; }
+
+    for (auto& [s, h] : x86RegisterMap) {
+        emit(std::format("x{} = ctx.reg[{}];\n", s, s));
     }
 }
 
@@ -325,12 +365,14 @@ void emitInstruction(const Instruction& instruction, std::set<uint32_t>& leaders
             emit(std::format("{} = 0x{:X} + 0x{:X};\n", REG(RD), instruction.address, instruction.immediate << 12), instruction.rd);
             break;
         case EInstruction::ECALL:
+            emitRegisterStore();
             if (!reg_known[a7]) {
                 printf("a7 not tracked, 0x%x\n", instruction.address);
                 emit(std::format("Syscall::handle(ctx);\n"));
             } else {
                 emit(std::format("Syscall::handle(ctx, {});\n", reg_values[a7]));
             }
+            emitRegisterLoad();
             reg_known[a0] = false; // syscall return values gets written into a0
             break;
         case EInstruction::EBREAK:
@@ -470,6 +512,8 @@ std::vector<char*> parseArguments(int argc, char** argv) {
             options.softwareBranchPrediction = true;
         } else if (arg == "--use-profiling-data") {
             options.useProfilingData = true;
+        } else if (arg == "--pin-registers") {
+            options.pinRegisters = true;
         } else {
             positional.push_back(argv[i]);
         }
@@ -487,7 +531,8 @@ int main(int argc, char** argv) {
                    << "  --no-translation-chaining     Disable translation chaining between indirect jumps (default: enabled)\n"
                    << "  --profile-indirect            Collect overhead data for indirect branch handling, requires --no-translation-chaining (default: disabled)\n"
                    << "  --software-branch-prediction  Hardcode most frequent indirect branch targets using profiling data (default: disabled)\n"
-                   << "  --use-profiling-data          Use profiling data to supplement jump target identification (default: disabled)\n";
+                   << "  --use-profiling-data          Use profiling data to supplement jump target identification (default: disabled)\n"
+                   << "  --pin-registers               Pins most frequently used guest registers to host ones (default: disabled)\n";
         return 1;
     }
 
@@ -542,6 +587,7 @@ int main(int argc, char** argv) {
     emit("Memory memory;\n");
     emit("Context ctx(memory);\n");
 
+    emitPinnedRegisters();
     emitInfoPrint();
 
     emit("\n\n__attribute__((noinline))\n");
@@ -564,9 +610,11 @@ int main(int argc, char** argv) {
     emit("\t};\n\n");
 
     emit("\tuint32_t address;\n");
+    emitRegisterLoad(); // pull in the initial register state
     emit("\n\twhile (true) {\n");
     emit(std::format("\t\tuint32_t pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
-    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
+    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
+    emit("\t\t\tprintInfo(ctx);\n\t\t\treturn 0;\n\t\t}\n");
     emit("\t\tvoid* target = dispatch[pcDispatchIndex];\n");
 
     if (options.profileIndirect && !options.translationChaining) {
@@ -584,14 +632,16 @@ int main(int argc, char** argv) {
     // Emulation fallback
     indent = 2;
     emit("INVALID: {\n");
+    emitRegisterStore(); //  must run before anything else does in here
     emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("\twhile(dispatch[pcDispatchIndex] == &&INVALID) {\n");
     emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
     emit("\t\tInterpreter::runInstructionSwitch(ctx);\n\n");
     emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
-    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
+    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // ctx.reg[] is already authoritative here, no re-store needed
     emit("\t}\n");
     emit("\tstd::cout << \"Switching back to translated code at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+    emitRegisterLoad();
     emit("}\n");
     indent = 1;
     emit("}\n");
