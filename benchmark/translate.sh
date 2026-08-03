@@ -16,6 +16,8 @@ TIMING_FILE="translation-times.csv"
 LINE_COUNT_FILE="translation-loc.csv"
 INSTRUCTION_EXPANSION_FILE="translation-instruction-expansion.csv"
 
+cmake --build "$SBT_BUILD_DIR" --target sbt || exit 1
+
 if [ ! -f "$SBT_PATH" ]; then
     echo "Translator binary \"$SBT_PATH\" not found."
     exit 1
@@ -40,7 +42,7 @@ for BINARY in bin/riscv/*; do
     BINARY_NAME=$(basename "$BINARY")
 
     echo "Translating $BINARY..."
-    "$SBT_PATH" "$BINARY" "$TRANSLATED_SOURCE" || exit 1
+    "$SBT_PATH" "$BINARY" "$TRANSLATED_SOURCE" "$@" || exit 1
 
     WHILE_TRUE_LINE=$(grep -nF 'while (true) {' "$TRANSLATED_SOURCE" | head -n1 | cut -d: -f1)
     MAIN_LINE=$(grep -nF 'int main' "$TRANSLATED_SOURCE" | head -n1 | cut -d: -f1)

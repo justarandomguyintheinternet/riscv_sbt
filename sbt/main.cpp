@@ -101,9 +101,15 @@ using TemplateValues = std::initializer_list<std::pair<std::string_view, std::st
 
 std::string loadTemplate(const std::string& name) {
     std::string path = std::format("./sbt/templates/{}.cpp.in", name);
+    std::string scriptPath = std::format("../sbt/templates/{}.cpp.in", name);
+
     std::ifstream file(path);
     if (!file) {
+        file.open(scriptPath);
+    }
+    if (!file) {
         std::cerr << "Failed to open template: " << path << std::endl;
+        printf("%s\n", std::filesystem::current_path().string().c_str());
         std::exit(1);
     }
 
@@ -191,12 +197,12 @@ void resetTracked() {
 }
 
 void emitInstruction(const Instruction& instruction, std::set<uint32_t>& leaders, uint32_t textStartAddress) {
-    indent = 2;
+    indent = 1;
     if (leaders.contains(instruction.address)) {
         emit(std::format("L{:X}:\n", instruction.address));
         resetTracked();
     }
-    indent = 3;
+    indent = 2;
 
     current = &instruction;
 

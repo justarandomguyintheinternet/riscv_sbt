@@ -1,9 +1,9 @@
-			std::cout << "Switching to emulation fallback at 0x" << std::hex << ctx.pc << std::dec << std::endl;
-			while(dispatch[pcDispatchIndex] == &&INVALID) {
-				std::cout << "Emulating instruction at 0x" << std::hex << ctx.pc << std::dec << std::endl;
-				Interpreter::runInstructionSwitch(ctx);
+        std::cout << "Switching to emulation fallback at 0x" << std::hex << ctx.pc << std::dec << std::endl;
+        while(dispatch[pcDispatchIndex] == &&INVALID) {
+            std::cout << "Emulating instruction at 0x" << std::hex << ctx.pc << std::dec << std::endl;
+            Interpreter::runInstructionSwitch(ctx);
 
-				pcDispatchIndex = (ctx.pc - %%TEXT_START_ADDR%%) / 4;
-				if (ctx.pc == %%BASE_RA%%) { printInfo(ctx); return 0; }
-			}
-			std::cout << "Switching back to translated code at 0x" << std::hex << ctx.pc << std::dec << std::endl;
+            pcDispatchIndex = (ctx.pc - %%TEXT_START_ADDR%%) / 4;
+            if (ctx.pc == %%BASE_RA%%) { printInfo(ctx); return 0; }
+        }
+        std::cout << "Switching back to translated code at 0x" << std::hex << ctx.pc << std::dec << std::endl;
