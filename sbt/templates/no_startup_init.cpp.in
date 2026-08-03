@@ -1,0 +1,3 @@
+	ctx.reg[1] = %%BASE_RA%%;
+	ctx.reg[3] = %%GLOBAL_POINTER%%;
+

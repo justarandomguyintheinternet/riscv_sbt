@@ -42,7 +42,6 @@ uint32_t reg_values[32];
 bool reg_known[32];
 
 #define BASE_RA 0xdeadbeef // Used for baremetal, not compatible with translation chaining
-#define MULTILINE(...) #__VA_ARGS__
 
 std::string REG(InstructionField field) {
     if (current == nullptr) {
@@ -98,27 +97,37 @@ void emit(std::string_view text, uint8_t rd) {
     reg_known[rd] = false;
 }
 
-void emitInfoPrint() {
-    emit(MULTILINE(
-    void printInfo(Context& ctx) {
-        bool hasRegOutput = false;
-        for (int i = 0; i < 32; ++i) {
-            if (ctx.reg[i] != 0) {
-                if (!hasRegOutput) {
-                    std::cout << "\nRegisters:\n";
-                    std::cout << "  idx   hex         signed\n";
-                    hasRegOutput = true;
-                }
+using TemplateValues = std::initializer_list<std::pair<std::string_view, std::string>>;
 
-                std::cout << "  x" << std::dec << std::setw(2) << std::setfill('0') << i
-                          << "   0x" << std::hex << std::setw(8) << std::setfill('0') << ctx.reg[i]
-                          << "  " << std::dec << static_cast<int32_t>(ctx.reg[i]) << '\n';
-            }
-        }
-
-        std::cout << std::dec << std::setfill(' ');
+std::string loadTemplate(const std::string& name) {
+    std::string path = std::format("./sbt/templates/{}.cpp.in", name);
+    std::ifstream file(path);
+    if (!file) {
+        std::cerr << "Failed to open template: " << path << std::endl;
+        std::exit(1);
     }
-    ));
+
+    return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+}
+
+// Placeholders use %%KEY%%
+std::string fillTemplate(std::string tmpl, TemplateValues values) {
+    for (const auto& [key, value] : values) {
+        std::string token = std::format("%%{}%%", key);
+        for (size_t pos; (pos = tmpl.find(token)) != std::string::npos;) {
+            tmpl.replace(pos, token.size(), value);
+        }
+    }
+
+    return tmpl;
+}
+
+void emitTemplate(const std::string& name) {
+    emit(loadTemplate(name));
+}
+
+void emitFilledTemplate(const std::string& name, TemplateValues values) {
+    emit(fillTemplate(loadTemplate(name), values));
 }
 
 void emitLoadSaveAddress(const Instruction& instruction) {
@@ -563,40 +572,24 @@ int main(int argc, char** argv) {
     std::set<uint32_t> leaders = getBasicBlocksLeaders(instructions);
     harvestStaticData(binary, leaders, textStartAddress, textEndAddress);
 
-    // Translated code emission start
+    ////////////////////////////////////
+    // Translated code emission start //
+    ////////////////////////////////////
 
     output.open(positional.size() < 2 ? "./sbt/translated/src.cpp" : positional[1]);
-    emit("#include <iostream>\n");
-    emit("#include <cstdint>\n");
-    emit("#include <iomanip>\n");
-    emit("#include <runtime/syscall.h>\n");
-    emit("#include <runtime/Context.h>\n");
-    emit("#include <Interpreter.h>\n");
+    emitTemplate("output_prologue");
 
     if (options.profileIndirect && !options.translationChaining) {
-        emit("#include <x86intrin.h>\n");
-        emit("#pragma intrinsic(__rdtsc)\n\n");
-
-        emit("bool timerActive = false;\n");
-        emit("uint64_t cycles = 0;\n");
-        emit("uint64_t timer = 0;\n");
-        emit("uint64_t indirectMeasured = 0;\n");
-        emit("uint8_t heatup = 5;\n\n");
+        emitTemplate("profiling_globals");
     }
 
-    emit("Memory memory;\n");
-    emit("Context ctx(memory);\n");
-
     emitPinnedRegisters();
-    emitInfoPrint();
 
-    emit("\n\n__attribute__((noinline))\n");
-    emit("__attribute__((section(\".translated_text\")))\n");
-    emit("int run_translated() {\n");
+    emitFilledTemplate("run_translated_open", {
+        {"TEXT_SIZE", std::format("{}", textSize)},
+    });
 
     // build dispatch table https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
-    emit(std::format("\tstatic void* dispatch[{}] = {{\n", textSize));
-
     for (uint32_t i = 0; i < textSize; i++) {
         uint32_t currentAddress = textStartAddress + (i * 4);
 
@@ -607,22 +600,21 @@ int main(int argc, char** argv) {
         }
     }
 
-    emit("\t};\n\n");
-
-    emit("\tuint32_t address;\n");
+    emitTemplate("dispatch_table_close");
+    indent = 1;
     emitRegisterLoad(); // pull in the initial register state
-    emit("\n\twhile (true) {\n");
-    emit(std::format("\t\tuint32_t pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
-    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{\n", BASE_RA)); // stop execution on baremetal, if no exit syscall is used
-    emit("\t\t\tprintInfo(ctx);\n\t\t\treturn 0;\n\t\t}\n");
-    emit("\t\tvoid* target = dispatch[pcDispatchIndex];\n");
+
+    // BASE_RA is checked to stop execution on baremetal, if no exit syscall is used
+    emitFilledTemplate("dispatch_loop_prologue", {
+        {"TEXT_START_ADDR", std::format("0x{:X}", textStartAddress)},
+        {"BASE_RA", std::format("0x{:X}", BASE_RA)},
+    });
 
     if (options.profileIndirect && !options.translationChaining) {
-        emit("\t\tif (timerActive && heatup == 0) {cycles += __rdtsc() - timer; timerActive = false; indirectMeasured++; printf(\"%llu\\n\", (unsigned long long)cycles); }\n");
-        emit("\t\tif(heatup > 0) { heatup--; }\n");
+        emitTemplate("indirect_profiling_check");
     }
 
-    emit("\t\tgoto *target;\n\n");
+    emit("\tgoto *target;\n\n");
 
     // todo: peephole pass over `instructions` before emission, collapsing idiom sequences into simpler C
     for (const auto& inst : instructions) {
@@ -630,39 +622,34 @@ int main(int argc, char** argv) {
     }
 
     // Emulation fallback
-    indent = 2;
     emit("INVALID: {\n");
+    indent = 3;
     emitRegisterStore(); //  must run before anything else does in here
-    emit("\tstd::cout << \"Switching to emulation fallback at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
-    emit("\twhile(dispatch[pcDispatchIndex] == &&INVALID) {\n");
-    emit("\t\tstd::cout << \"Emulating instruction at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
-    emit("\t\tInterpreter::runInstructionSwitch(ctx);\n\n");
-    emit(std::format("\t\tpcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
-    emit(std::format("\t\tif (ctx.pc == 0x{:X}) {{ printInfo(ctx); return 0; }}\n", BASE_RA)); // ctx.reg[] is already authoritative here, no re-store needed
-    emit("\t}\n");
-    emit("\tstd::cout << \"Switching back to translated code at 0x\" << std::hex << ctx.pc << std::dec << std::endl;\n");
+
+    emitFilledTemplate("interpreter_fallback", {
+        {"TEXT_START_ADDR", std::format("0x{:X}", textStartAddress)},
+        {"BASE_RA", std::format("0x{:X}", BASE_RA)},
+    });
+
     emitRegisterLoad();
-    emit("}\n");
-    indent = 1;
-    emit("}\n");
     indent = 0;
-    emit("}\n");
+    emit("}}}\n"); // Close fallback, dispatch loop and run_translated
 
     // Dispatch table and memory loading
 
-    emit("int main(int argc, char** argv, char** envp) {\n");
-
-    emit("\tmemory.loadAux(Auxiliary{ .argc = argc, .argv = argv, .envp = envp }, false);\n");
-    emit(std::format("\tctx.pc = 0x{:X};\n", binary.getEntryAddress()));
-    emit("\tctx.reg[2] = memory.getStackPointer();\n\n");
+    emitFilledTemplate("main_open", {
+        {"ENTRY_ADDRESS", std::format("0x{:X}", binary.getEntryAddress())},
+    });
 
     // not present for binaries compiled for baremetal, without picolibc
     bool hasStartup = binary.getSymbolAddress("_start").has_value();
 
     if (!hasStartup) {
         std::cout << "No _start symbol found, using default init" << std::endl;
-        emit(std::format("\tctx.reg[1] = 0x{:X};\n", BASE_RA));
-        emit(std::format("\tctx.reg[3] = 0x{:X};\n\n", binary.getSymbolAddress("__global_pointer$").value_or(0)));
+        emitFilledTemplate("no_startup_init", {
+            {"BASE_RA", std::format("0x{:X}", BASE_RA)},
+            {"GLOBAL_POINTER", std::format("0x{:X}", binary.getSymbolAddress("__global_pointer$").value_or(0))},
+        });
     }
 
     // load static data
@@ -688,10 +675,8 @@ int main(int argc, char** argv) {
         emit(std::format("\tctx.memory.write<uint32_t>(0x{:X}, 0x{:X});\n", instruction.address, instruction.instruction));
     }
 
-    emit("\n\treturn run_translated();\n");
-
     indent = 0;
-    emit("}\n");
+    emitTemplate("main_close");
 
     output.close();
 

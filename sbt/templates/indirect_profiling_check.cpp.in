@@ -1,0 +1,7 @@
+        if (timerActive && heatup == 0) {
+            cycles += __rdtsc() - timer;
+            timerActive = false;
+            indirectMeasured++;
+            printf("%llu\n", (unsigned long long)cycles);
+        }
+        if(heatup > 0) { heatup--; }

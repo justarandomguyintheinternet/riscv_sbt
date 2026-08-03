@@ -1,0 +1,9 @@
+#include <x86intrin.h>
+#pragma intrinsic(__rdtsc)
+
+bool timerActive = false;
+uint64_t cycles = 0;
+uint64_t timer = 0;
+uint64_t indirectMeasured = 0;
+uint8_t heatup = 5;
+
