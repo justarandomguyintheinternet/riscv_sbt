@@ -20,8 +20,8 @@ struct TranslationOptions {
 
 TranslationOptions options;
 
-inline constexpr std::array<std::pair<int, std::string_view>, 6> x86RegisterMap = {{
-    {ra, "r8"}, {sp, "r9"}, {a5, "r10"}, {a4, "r11"}, {a0, "r12"}, {s0, "r13"}
+inline constexpr std::array<std::pair<int, std::string_view>, 8> x86RegisterMap = {{
+    {ra, "r8"}, {sp, "r9"}, {a5, "r10"}, {a4, "r11"}, {a0, "r12"}, {s0, "r13"}, {a3, "r14"}, {a2, "r15"}
 }};
 
 constexpr std::optional<std::string_view> getHostRegister(int sourceRegister) {
