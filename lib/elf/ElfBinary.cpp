@@ -1,4 +1,5 @@
 #include "ElfBinary.h"
+#include <algorithm>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -46,8 +47,30 @@ ElfBinary::LoadResult ElfBinary::load() {
     }
 
     decode();
+    computeTextBounds();
 
     return Success;
+}
+
+// Span covering every executable section
+void ElfBinary::computeTextBounds() {
+    bool found = false;
+
+    for (const auto& section : sections) {
+        if (section.getType() != ElfBinarySection::Text) {
+            continue;
+        }
+
+        if (!found) {
+            textStartAddress = section.getStartAddress();
+            textEndAddress = section.getEndAddress();
+            found = true;
+            continue;
+        }
+
+        textStartAddress = std::min(textStartAddress, section.getStartAddress());
+        textEndAddress = std::max(textEndAddress, section.getEndAddress());
+    }
 }
 
 std::optional<uint32_t> ElfBinary::getSymbolAddress(const char* symbolName) const {
@@ -201,7 +224,7 @@ uint32_t ElfBinary::loadToMemory(Memory& memory) const {
         const auto& seg = section.getSegmentInfo();
         uint32_t addr = section.getLoadAddress();
 
-        if (addr + section.getSize() * 4 > memory.getSize()) {
+        if (addr + section.getByteSize() > memory.getSize()) {
             printf("Section %s exceeds memory size\n", section.getName().c_str());
             continue;
         }

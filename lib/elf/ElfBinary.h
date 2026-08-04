@@ -56,13 +56,20 @@ public:
     std::optional<uint32_t> getSymbolAddress(const char* symbolName) const;
     int32_t getEntryAddress() const;
 
+    uint32_t getTextStartAddress() const { return textStartAddress; } // Lowest start address among executable sections
+    uint32_t getTextEndAddress() const { return textEndAddress; } // Highest end address among executable sections, exclusive
+    uint32_t getTextWordCount() const { return (textEndAddress - textStartAddress) / 4; } // Words spanned, including any gaps between sections
+
 private:
     void decode();
+    void computeTextBounds();
 
     Elf* elf;
     const char* filename;
     int fd;
     std::vector<ElfBinarySection> sections;
+    uint32_t textStartAddress = 0;
+    uint32_t textEndAddress = 0;
 };
 
 #endif //RISCV_EMU_ELFBINARY_H

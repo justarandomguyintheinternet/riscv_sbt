@@ -1,6 +1,19 @@
 add_subdirectory(translated)
-add_executable(sbt main.cpp)
+add_executable(sbt
+        main.cpp
+        Options.cpp
+        Options.h
+        analysis/BasicBlocks.cpp
+        analysis/BasicBlocks.h
+        codegen/Emitter.cpp
+        codegen/Emitter.h
+        codegen/InstructionEmitter.cpp
+        codegen/InstructionEmitter.h
+        codegen/RuntimeEmitter.cpp
+        codegen/RuntimeEmitter.h
+)
 
+target_include_directories(sbt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(sbt PRIVATE riscv_lib)
 target_link_libraries(sbt PRIVATE riscv_emu)
 

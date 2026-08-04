@@ -19,5 +19,5 @@ ElfBinarySection::ElfBinarySection(std::string name, uint64_t startAddress, std:
 }
 
 uint32_t ElfBinarySection::getWord(uint32_t address) const {
-    return data[address - startAddress];
+    return data[(address - startAddress) / 4]; // data is a word vector, address is a byte address
 }

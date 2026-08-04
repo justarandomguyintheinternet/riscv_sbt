@@ -69,16 +69,10 @@ int main(int argc, char** argv, char** envp) {
     Interpreter::activeProfilingInfo = &info;
 
 #ifdef PREDECODE
-    auto text = binary.getTypeSections(ElfBinarySection::Text);
-    uint32_t textSize = 0; // Sum of the size of all sections which are executable, size counts uint32_t's
-    uint32_t textStartAddress = 1 << 31; // Lowest start address among executable sections, used for calculating zero based pc (To make dispatch array more compact)
+    const uint32_t textStartAddress = binary.getTextStartAddress();
 
-    for (const auto& ref : text) {
-        textSize += ref.get().getSize();
-        textStartAddress = std::min(textStartAddress, ref.get().getStartAddress());
-    }
-
-    std::vector<Instruction> instructions(textSize);
+    // Default init to INVALID instruction, so that gaps are invalid (if it somehow manages to jump there)
+    std::vector<Instruction> instructions(binary.getTextWordCount(), Instruction{EInstruction::INVALID});
 
     std::vector<Instruction> iVec;
     binary.decodeToContainer(iVec);

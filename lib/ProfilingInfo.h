@@ -6,7 +6,6 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
-#include <string>
 #include <unordered_map>
 
 class ProfilingInfo {

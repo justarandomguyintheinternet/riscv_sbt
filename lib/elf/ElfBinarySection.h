@@ -29,7 +29,10 @@ public:
     SectionType getType() const { return type; }
     const SegmentInfo& getSegmentInfo() const { return segmentInfo; }
     uint32_t getWord(uint32_t address) const;
-    uint32_t getSize() const { return data.size(); }
+
+    uint32_t getWordCount() const { return data.size(); }
+    uint32_t getByteSize() const { return data.size() * 4; }
+    uint32_t getEndAddress() const { return startAddress + getByteSize(); } // Exclusive
 
 private:
     std::string name;
