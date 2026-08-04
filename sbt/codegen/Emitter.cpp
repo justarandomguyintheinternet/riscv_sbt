@@ -68,7 +68,7 @@ void Emitter::emitFilledTemplate(const std::string& name, TemplateValues values)
 void Emitter::emitPinnedRegisters() {
     if (!options.pinRegisters) { return; }
 
-    for (auto& [s, h] : x86RegisterMap) {
+    for (auto& [s, h] : registerMap) {
         emit(std::format("register uint32_t x{} asm (\"{}\");\n", s, h));
     }
 }
@@ -76,7 +76,7 @@ void Emitter::emitPinnedRegisters() {
 void Emitter::emitRegisterStore() {
     if (!options.pinRegisters) { return; }
 
-    for (auto& [s, h] : x86RegisterMap) {
+    for (auto& [s, h] : registerMap) {
         emit(std::format("ctx.reg[{}] = x{};\n", s, s));
     }
 }
@@ -84,9 +84,17 @@ void Emitter::emitRegisterStore() {
 void Emitter::emitRegisterLoad() {
     if (!options.pinRegisters) { return; }
 
-    for (auto& [s, h] : x86RegisterMap) {
+    for (auto& [s, h] : registerMap) {
         emit(std::format("x{} = ctx.reg[{}];\n", s, s));
     }
+}
+
+std::optional<std::string_view> Emitter::getHostRegister(int sourceRegister) const {
+    for (auto& [s, h] : registerMap) {
+        if (s == sourceRegister) return h;
+    }
+
+    return {};
 }
 
 const Options::TranslationOptions& Emitter::getOptions() const {

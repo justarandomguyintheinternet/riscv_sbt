@@ -7,10 +7,16 @@
 #include <ProfilingInfo.h>
 #include <decoding/Decoder.h>
 #include <elf/ElfBinary.h>
+#include <runtime/registers.h>
 
+#include <array>
 #include <iostream>
 #include <set>
 #include <vector>
+
+constexpr std::array<RegisterMapping, 8> x86RegisterMap = {{
+    {ra, "r8"}, {sp, "r9"}, {a5, "r10"}, {a4, "r11"}, {a0, "r12"}, {s0, "r13"}, {a3, "r14"}, {a2, "r15"}
+}};
 
 int main(int argc, char** argv) {
     Options::TranslationOptions options;
@@ -41,7 +47,7 @@ int main(int argc, char** argv) {
     // Translated code emission start //
     ////////////////////////////////////
 
-    Emitter emitter(positional.size() < 2 ? "./sbt/translated/src.cpp" : positional[1], options);
+    Emitter emitter(positional.size() < 2 ? "./sbt/translated/src.cpp" : positional[1], options, x86RegisterMap);
     RuntimeEmitter runtimeEmitter(emitter, binary, leaders);
     InstructionEmitter instructionEmitter(emitter, profilingInfo, leaders, binary.getTextStartAddress());
 

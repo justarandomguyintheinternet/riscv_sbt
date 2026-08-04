@@ -36,7 +36,7 @@ std::string InstructionEmitter::REG(InstructionField field) const {
         return std::format("{}", regValues[index]);
     }
 
-    auto mapped = getHostRegister(index);
+    auto mapped = emitter.getHostRegister(index);
     if (emitter.getOptions().pinRegisters && mapped.has_value()) {
         return std::format("x{}", index);
     }
