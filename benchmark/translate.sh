@@ -41,6 +41,8 @@ for BINARY in bin/riscv/*; do
 
     BINARY_NAME=$(basename "$BINARY")
 
+    cp ./profiling/"$BINARY_NAME.json" "./profiling.json"
+
     echo "Translating $BINARY..."
     "$SBT_PATH" "$BINARY" "$TRANSLATED_SOURCE" "$@" || exit 1
 
