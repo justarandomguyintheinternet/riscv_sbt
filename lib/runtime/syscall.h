@@ -56,7 +56,7 @@ namespace Syscall {
             return;
         }
 
-        if (ctx.reg[0] > ctx.reg[sp]) { // hitting the stack
+        if (ctx.reg[a0] > ctx.reg[sp]) { // hitting the stack
             ctx.reg[a0] = ctx.memory.getHeapEnd();
         } else {
             ctx.memory.setHeapEnd(ctx.reg[a0]);

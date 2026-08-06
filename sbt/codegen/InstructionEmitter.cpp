@@ -235,8 +235,8 @@ void InstructionEmitter::emitInstruction(const Instruction& instruction) {
             emit(std::format("goto L{:X};\n", instruction.address + instruction.immediate));
             break;
         case EInstruction::JALR: {
-            emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
             emit(std::format("ctx.pc = {} + {};\n", instruction.immediate, REG(RS1)));
+            emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
             if (emitter.getOptions().profileIndirect && !emitter.getOptions().translationChaining) {
                 emit("timerActive = true; timer = __rdtsc();\n");
             }
@@ -343,11 +343,13 @@ void InstructionEmitter::emitInstruction(const Instruction& instruction) {
             emit(std::format("{} = memory.read<uint32_t>({});\n", REG(RD), REG(RS1)), instruction.rd);
             break;
         case EInstruction::SC_W:
-            emit(std::format("memory.write<uint32_t>({}, {});\n", REG(RS1), REG(RS2)), instruction.rd);
+            emit(std::format("memory.write<uint32_t>({}, {});\n", REG(RS1), REG(RS2))); // store happens even when the result is discarded into x0
             emit(std::format("{} = 0;\n", REG(RD)), instruction.rd);
             break;
         case EInstruction::INVALID:
+            emitter.emitRegisterStore(); // printf clobbers the caller saved hosts registers pinned guest registers live in
             emit(std::format("printf(\"Unsupported instruction at 0x{:X}\\n\");\n", instruction.address));
+            emitter.emitRegisterLoad();
             break;
     }
 
