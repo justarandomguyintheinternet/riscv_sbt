@@ -9,9 +9,6 @@
 #include <set>
 #include <vector>
 
-// Used for baremetal, not compatible with translation chaining
-inline constexpr uint32_t BASE_RA = 0xdeadbeef;
-
 // Emits everything around the main translated instructions
 class RuntimeEmitter {
 public:
@@ -24,6 +21,9 @@ public:
     void emitGeneratedMain(const std::vector<Instruction>& instructions);
 
 private:
+    // Used for baremetal
+    uint32_t getBaseRa() const { return binary.getTextEndAddress(); }
+
     Emitter& emitter;
     const ElfBinary& binary;
     const std::set<uint32_t>& leaders;

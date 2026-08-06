@@ -1,8 +1,4 @@
 
 	while (true) {
 		uint32_t pcDispatchIndex = (ctx.pc - %%TEXT_START_ADDR%%) / 4;
-		if (ctx.pc == %%BASE_RA%%) {
-			printInfo(ctx);
-			return 0;
-		}
 		void* target = dispatch[pcDispatchIndex];

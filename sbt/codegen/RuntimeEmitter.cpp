@@ -20,7 +20,7 @@ void RuntimeEmitter::emitDispatchTable() {
     const uint32_t textStartAddress = binary.getTextStartAddress();
 
     emitter.emitFilledTemplate("run_translated_open", {
-        {"TEXT_SIZE", std::format("{}", wordCount)},
+        {"TEXT_SIZE", std::format("{}", wordCount + 1)}, // one extra slot for the BASE_RA sentinel
     });
 
     // build dispatch table https://eli.thegreenplace.net/2012/07/12/computed-goto-for-efficient-dispatch-tables
@@ -34,6 +34,9 @@ void RuntimeEmitter::emitDispatchTable() {
         }
     }
 
+    // Slot wordCount maps to getBaseRa(), so stopping on baremetal costs a table entry instead of a compare per dispatch
+    emitter.emit("\t\t&&EXIT,\n");
+
     emitter.emitTemplate("dispatch_table_close");
 }
 
@@ -42,10 +45,8 @@ void RuntimeEmitter::emitDispatchLoopPrologue() {
     emitter.setIndent(1);
     emitter.emitRegisterLoad(); // pull in the initial register state
 
-    // BASE_RA is checked to stop execution on baremetal, if no exit syscall is used
     emitter.emitFilledTemplate("dispatch_loop_prologue", {
         {"TEXT_START_ADDR", std::format("0x{:X}", binary.getTextStartAddress())},
-        {"BASE_RA", std::format("0x{:X}", BASE_RA)},
     });
 
     if (emitter.getOptions().profileIndirect && !emitter.getOptions().translationChaining) {
@@ -58,6 +59,15 @@ void RuntimeEmitter::emitDispatchLoopPrologue() {
 // Last label of runTranslated(), handling any jumps to instructions not identified as basic block leaders
 void RuntimeEmitter::emitInterpreterFallback() {
     emitter.setIndent(2);
+    emitter.emit("EXIT: {\n");
+
+    emitter.setIndent(3);
+    emitter.emitRegisterStore(); // printInfo reads ctx.reg[]
+    emitter.emit("printInfo(ctx);\n");
+    emitter.emit("return 0;\n");
+
+    emitter.setIndent(2);
+    emitter.emit("}\n");
     emitter.emit("INVALID: {\n");
 
     emitter.setIndent(3);
@@ -65,7 +75,6 @@ void RuntimeEmitter::emitInterpreterFallback() {
 
     emitter.emitFilledTemplate("interpreter_fallback", {
         {"TEXT_START_ADDR", std::format("0x{:X}", binary.getTextStartAddress())},
-        {"BASE_RA", std::format("0x{:X}", BASE_RA)},
     });
 
     emitter.emitRegisterLoad();
@@ -85,7 +94,7 @@ void RuntimeEmitter::emitGeneratedMain(const std::vector<Instruction>& instructi
     if (!hasStartup) {
         std::cout << "No _start symbol found, using default init" << std::endl;
         emitter.emitFilledTemplate("no_startup_init", {
-            {"BASE_RA", std::format("0x{:X}", BASE_RA)},
+            {"BASE_RA", std::format("0x{:X}", getBaseRa())},
             {"GLOBAL_POINTER", std::format("0x{:X}", binary.getSymbolAddress("__global_pointer$").value_or(0))},
         });
     }
