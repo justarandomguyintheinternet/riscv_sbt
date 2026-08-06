@@ -1,0 +1,5 @@
+
+// Every lifted function returns the guest address control ended up at, so a return that does not land
+// at its call site unwinds the host stack back to runTranslated() instead of corrupting execution
+using LiftedFn = uint32_t (*)();
+

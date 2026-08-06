@@ -12,6 +12,14 @@
 
 class ElfBinary {
 public:
+    // Plain data on purpose: libelf is linked PRIVATE into riscv_lib, so no GElf_* type may leak into this header
+    struct FunctionSymbol {
+        uint32_t address;
+        uint32_t size; // 0 when the symbol table does not give one, callers have to infer the extent
+        bool global;   // STB_GLOBAL/STB_WEAK, used to pick a name among aliases sharing an address
+        std::string name;
+    };
+
     explicit ElfBinary(const char* filename) : elf(nullptr), filename(filename), fd(0) {};
     ~ElfBinary();
 
@@ -54,6 +62,7 @@ public:
     std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(ElfBinarySection::SectionType type) const;
     std::optional<std::reference_wrapper<const ElfBinarySection>> getSection(std::string_view name) const;
     std::optional<uint32_t> getSymbolAddress(const char* symbolName) const;
+    std::vector<FunctionSymbol> getFunctionSymbols() const; // Every STT_FUNC symbol landing inside the text bounds
     int32_t getEntryAddress() const;
 
     uint32_t getTextStartAddress() const { return textStartAddress; } // Lowest start address among executable sections

@@ -46,16 +46,6 @@ for BINARY in bin/riscv/*; do
     echo "Translating $BINARY..."
     "$SBT_PATH" "$BINARY" "$TRANSLATED_SOURCE" "$@" || exit 1
 
-    WHILE_TRUE_LINE=$(grep -nF 'while (true) {' "$TRANSLATED_SOURCE" | head -n1 | cut -d: -f1)
-    MAIN_LINE=$(grep -nF 'int main' "$TRANSLATED_SOURCE" | head -n1 | cut -d: -f1)
-
-    if [ -z "$MAIN_LINE" ] || [ -z "$WHILE_TRUE_LINE" ]; then
-        echo "Failed to locate loop/main markers in $TRANSLATED_SOURCE for $BINARY_NAME."
-        exit 1
-    fi
-
-    LINE_COUNT_DIFF=$((MAIN_LINE - WHILE_TRUE_LINE))
-
     echo "Compiling translated target for $BINARY_NAME..."
     cmake --build "$SBT_BUILD_DIR" --target translated || exit 1
 
@@ -73,7 +63,6 @@ for BINARY in bin/riscv/*; do
     cp "$TRANSLATED_BINARY" "$OUTPUT_DIR/$BINARY_NAME" || exit 1
 
     TRANSLATED_BINARIES+=("$BINARY_NAME")
-    TRANSLATED_LINE_COUNTS+=("$LINE_COUNT_DIFF")
     ORIGINAL_INSTRUCTION_COUNTS+=("$ORIGINAL_INSTRUCTION_COUNT")
     TRANSLATED_INSTRUCTION_COUNTS+=("$TRANSLATED_INSTRUCTION_COUNT")
     INSTRUCTION_EXPANSION_FACTORS+=("$INSTRUCTION_EXPANSION_FACTOR")

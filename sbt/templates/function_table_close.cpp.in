@@ -1,0 +1,14 @@
+};
+
+// Maps a guest address to the function lifted for it, or nullptr when no function starts there
+static inline LiftedFn resolve(uint32_t pc) {
+	const uint32_t index = (pc - %%TEXT_START_ADDR%%) / 4;
+	return index < %%TEXT_SIZE%% ? functionTable[index] : nullptr;
+}
+
+// Indirect call: enter the target when it is a known entry, escape upward when it is not
+static inline uint32_t callIndirect(uint32_t target) {
+	const LiftedFn function = resolve(target);
+	return function != nullptr ? function() : target;
+}
+

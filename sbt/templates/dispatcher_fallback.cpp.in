@@ -1,0 +1,9 @@
+		ctx.pc = pc;
+		std::cout << "Switching to emulation fallback at 0x" << std::hex << ctx.pc << std::dec << std::endl;
+
+		do {
+			Interpreter::runInstructionSwitch(ctx);
+			pc = ctx.pc;
+		} while (pc != %%BASE_RA%% && resolve(pc) == nullptr);
+
+		std::cout << "Switching back to translated code at 0x" << std::hex << pc << std::dec << std::endl;

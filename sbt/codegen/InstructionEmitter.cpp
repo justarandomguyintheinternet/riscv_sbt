@@ -88,10 +88,132 @@ void InstructionEmitter::resetTracked() {
     }
 }
 
+void InstructionEmitter::beginFunction(const LiftedFunction& lifted, std::span<const Instruction> instructions) {
+    function = &lifted;
+    activeLabels.clear();
+    resetTracked();
+
+    // With a label table every leader is reachable, without one only the branches inside the body reach a block
+    if (lifted.hasLocalDispatch) {
+        for (uint32_t address = lifted.start; address < lifted.end; address += 4) {
+            if (leaders.contains(address)) {
+                activeLabels.insert(address);
+            }
+        }
+
+        return;
+    }
+
+    for (const auto& instruction : instructions) {
+        const TransferKind kind = classifyTransfer(instruction);
+        const uint32_t target = instruction.address + instruction.immediate;
+
+        const bool isLocal = kind == TransferKind::Branch || kind == TransferKind::DirectJump
+            ? lifted.contains(target)
+            : kind == TransferKind::Call && lifted.contains(target) && !functionMap.isEntry(target);
+
+        if (isLocal && leaders.contains(target)) {
+            activeLabels.insert(target);
+        }
+    }
+}
+
+// Jumps have no return path, so a target outside this function is either a tail call or an escape
+std::string InstructionEmitter::transferTo(uint32_t target) const {
+    if (function->contains(target)) {
+        return std::format("goto L{:X};", target);
+    }
+
+    if (functionMap.isSplit() && functionMap.isEntry(target)) {
+        return std::format("return {}();", functionMap.lookup(target)->name);
+    }
+
+    return std::format("return 0x{:X};", target); // escape, runTranslated() picks it up from here
+}
+
+void InstructionEmitter::emitBranch(std::string_view condition) {
+    emit(std::format("if ({}) {}\n", condition, transferTo(current->address + current->immediate)));
+}
+
+void InstructionEmitter::emitCall() {
+    const uint32_t target = current->address + current->immediate;
+    const uint32_t returnAddress = current->address + 4;
+
+    emit(std::format("{} = 0x{:X};\n", REG(RD), returnAddress), current->rd);
+
+    if (functionMap.isSplit() && functionMap.isEntry(target)) {
+        emit(std::format("if (const uint32_t escaped = {}(); escaped != 0x{:X}) {{ return escaped; }}\n",
+                         functionMap.lookup(target)->name, returnAddress));
+        resetTracked(); // the callee is free to clobber every guest register
+        return;
+    }
+
+    emit(std::format("{}\n", transferTo(target)));
+}
+
+void InstructionEmitter::emitReturn() {
+    emit(std::format("return {};\n", REG(RS1)));
+}
+
+void InstructionEmitter::emitIndirectTransfer(bool linking) {
+    // The target has to be materialised before rd is written, jalr is allowed to use the same register for both
+    if (current->immediate == 0) {
+        emit(std::format("target = {};\n", REG(RS1)));
+    } else {
+        emit(std::format("target = {} + {};\n", REG(RS1), current->immediate));
+    }
+
+    const uint32_t returnAddress = current->address + 4;
+
+    if (linking) {
+        emit(std::format("{} = 0x{:X};\n", REG(RD), returnAddress), current->rd);
+    }
+
+    if (emitter.getOptions().profileIndirect && !functionMap.isSplit()) {
+        emit("timerActive = true; timer = __rdtsc();\n");
+    }
+
+    if (functionMap.isSplit() && linking) {
+        emit(std::format("if (const uint32_t escaped = callIndirect(target); escaped != 0x{:X}) {{ return escaped; }}\n",
+                         returnAddress));
+        resetTracked();
+        return;
+    }
+
+    emitPredictedTargets();
+    emitIndirectDispatch();
+}
+
+// Hardcode the most frequently taken targets, so the common case does not go through the label table
+void InstructionEmitter::emitPredictedTargets() {
+    if (!emitter.getOptions().softwareBranchPrediction) {
+        return;
+    }
+
+    auto branchDestinations = profilingInfo.getIndirectBranchTargets(current->address);
+
+    for (int i = 0; i < 3 && !branchDestinations.empty(); ++i) {
+        auto max_it = std::max_element(branchDestinations.begin(), branchDestinations.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; });
+
+        if (leaders.contains(max_it->first)) {
+            emit(std::format("if (target == 0x{:X}) {}\n", max_it->first, transferTo(max_it->first)));
+        }
+
+        branchDestinations.erase(max_it);
+    }
+}
+
+void InstructionEmitter::emitIndirectDispatch() {
+    emit(std::format("dispatchIndex = (target - 0x{:X}) / 4;\n", function->start));
+    emit(std::format("if (dispatchIndex >= {}) {{ goto ESCAPE; }}\n", function->wordCount()));
+    emit("goto *localDispatch[dispatchIndex];\n");
+}
+
 void InstructionEmitter::emitInstruction(const Instruction& instruction) {
     emitter.setIndent(1);
     if (leaders.contains(instruction.address)) {
-        emit(std::format("L{:X}:\n", instruction.address));
+        emitter.emitIf(std::format("L{:X}:\n", instruction.address), activeLabels.contains(instruction.address));
         resetTracked();
     }
     emitter.setIndent(2);
@@ -213,55 +335,37 @@ void InstructionEmitter::emitInstruction(const Instruction& instruction) {
             break;
         }
         case EInstruction::BEQ:
-            emit(std::format("if ({} == {}) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
+            emitBranch(std::format("{} == {}", REG(RS1), REG(RS2)));
             break;
         case EInstruction::BNE:
-            emit(std::format("if ({} != {}) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
+            emitBranch(std::format("{} != {}", REG(RS1), REG(RS2)));
             break;
         case EInstruction::BLT:
-            emit(std::format("if (static_cast<int32_t>({}) < static_cast<int32_t>({})) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
+            emitBranch(std::format("static_cast<int32_t>({}) < static_cast<int32_t>({})", REG(RS1), REG(RS2)));
             break;
         case EInstruction::BGE:
-            emit(std::format("if (static_cast<int32_t>({}) >= static_cast<int32_t>({})) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
+            emitBranch(std::format("static_cast<int32_t>({}) >= static_cast<int32_t>({})", REG(RS1), REG(RS2)));
             break;
         case EInstruction::BLTU:
-            emit(std::format("if ({} < {}) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
+            emitBranch(std::format("{} < {}", REG(RS1), REG(RS2)));
             break;
         case EInstruction::BGEU:
-            emit(std::format("if ({} >= {}) goto L{:X};\n", REG(RS1), REG(RS2), instruction.address + instruction.immediate));
+            emitBranch(std::format("{} >= {}", REG(RS1), REG(RS2)));
             break;
         case EInstruction::JAL:
-            emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
-            emit(std::format("goto L{:X};\n", instruction.address + instruction.immediate));
+            if (classifyTransfer(instruction) == TransferKind::Call) {
+                emitCall();
+            } else {
+                emit(std::format("{}\n", transferTo(instruction.address + instruction.immediate)));
+            }
             break;
         case EInstruction::JALR: {
-            emit(std::format("ctx.pc = {} + {};\n", instruction.immediate, REG(RS1)));
-            emit(std::format("{} = 0x{:X};\n", REG(RD), instruction.address + 4), instruction.rd);
-            if (emitter.getOptions().profileIndirect && !emitter.getOptions().translationChaining) {
-                emit("timerActive = true; timer = __rdtsc();\n");
-            }
+            const TransferKind kind = classifyTransfer(instruction);
 
-            if (emitter.getOptions().softwareBranchPrediction) {
-                auto branchDestinations = profilingInfo.getIndirectBranchTargets(instruction.address);
-
-                // Hardcode top 3 most frequently used branches with direct targets
-                for (int i = 0; i < 3 && !branchDestinations.empty(); ++i) {
-                    auto max_it = std::max_element(branchDestinations.begin(), branchDestinations.end(),
-                        [](const auto& a, const auto& b) { return a.second < b.second; });
-
-                    if (leaders.contains(max_it->first)) {
-                        emit(std::format("if (ctx.pc == 0x{:X}) goto L{:X};\n", max_it->first, max_it->first));
-                    }
-
-                    branchDestinations.erase(max_it);
-                }
-            }
-
-            if (emitter.getOptions().translationChaining) {
-                emit(std::format("pcDispatchIndex = (ctx.pc - 0x{:X}) / 4;\n", textStartAddress));
-                emit("goto *dispatch[pcDispatchIndex];\n");
+            if (functionMap.isSplit() && kind == TransferKind::Return) {
+                emitReturn();
             } else {
-                emit("continue;\n");
+                emitIndirectTransfer(kind == TransferKind::IndirectCall);
             }
             break;
         }

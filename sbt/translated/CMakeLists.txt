@@ -1,5 +1,5 @@
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src.cpp)
-    set(FLAGS_TRANSLATED -O3 -fno-gcse)
+    set(FLAGS_TRANSLATED -O3)
 
     add_executable(translated src.cpp)
     target_compile_options(translated PRIVATE ${FLAGS_TRANSLATED})

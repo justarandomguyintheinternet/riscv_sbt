@@ -1,0 +1,12 @@
+	uint32_t pc = ctx.pc;
+
+	while (pc != %%BASE_RA%%) {
+		const LiftedFn function = resolve(pc);
+
+		if (function != nullptr) {
+			ctx.pc = pc; // only read by functions that dispatch on their entry block
+			pc = function();
+			continue;
+		}
+
+		// Escaped to an address no function starts at, single step until we are back on an entry

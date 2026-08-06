@@ -5,8 +5,12 @@ add_executable(sbt
         Options.h
         analysis/BasicBlocks.cpp
         analysis/BasicBlocks.h
+        analysis/Functions.cpp
+        analysis/Functions.h
         codegen/Emitter.cpp
         codegen/Emitter.h
+        codegen/FunctionEmitter.cpp
+        codegen/FunctionEmitter.h
         codegen/InstructionEmitter.cpp
         codegen/InstructionEmitter.h
         codegen/RuntimeEmitter.cpp

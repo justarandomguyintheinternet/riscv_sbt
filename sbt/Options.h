@@ -10,6 +10,7 @@ namespace Options {
         bool useProfilingData = false; // Use profiling data to supplement jump target identification
         bool softwareBranchPrediction = false; // Requires presence of profiling data
         bool pinRegisters = true; // Pin most frequently used guest registers to host ones
+        bool functionSplitting = true; // Emit one host function per guest function symbol instead of one for the whole binary
     };
 
     // TODO: maybe use some actual argparse type lib

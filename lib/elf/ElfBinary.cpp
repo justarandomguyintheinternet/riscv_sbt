@@ -73,7 +73,9 @@ void ElfBinary::computeTextBounds() {
     }
 }
 
-std::optional<uint32_t> ElfBinary::getSymbolAddress(const char* symbolName) const {
+// Walks the first SHT_SYMTAB, calling visit(symbol, name) until it returns false. Returns false if no symbol table exists.
+template<typename Visitor>
+static bool forEachSymbol(Elf* elf, Visitor visit) {
     Elf_Scn* section = nullptr;
 
     while ((section = elf_nextscn(elf, section)) != nullptr) {
@@ -83,26 +85,72 @@ std::optional<uint32_t> ElfBinary::getSymbolAddress(const char* symbolName) cons
             continue;
         }
 
-        if (sectionHeader.sh_type == SHT_SYMTAB) {
-            Elf_Data* data = elf_getdata(section, nullptr);
-            int count = sectionHeader.sh_size / sectionHeader.sh_entsize;
+        if (sectionHeader.sh_type != SHT_SYMTAB || sectionHeader.sh_entsize == 0) {
+            continue;
+        }
 
-            for (int i = 0; i < count; i++) {
-                GElf_Sym symbol;
-                gelf_getsym(data, i, &symbol);
+        Elf_Data* data = elf_getdata(section, nullptr);
+        int count = sectionHeader.sh_size / sectionHeader.sh_entsize;
 
-                const char* name = elf_strptr(elf, sectionHeader.sh_link, symbol.st_name);
-
-                if (name && std::string(name) == symbolName) {
-                    return symbol.st_value;
-                }
+        for (int i = 0; i < count; i++) {
+            GElf_Sym symbol;
+            if (gelf_getsym(data, i, &symbol) != &symbol) {
+                continue;
             }
 
-            return std::nullopt;
+            const char* name = elf_strptr(elf, sectionHeader.sh_link, symbol.st_name);
+
+            if (!visit(symbol, name)) {
+                return true;
+            }
         }
+
+        return true;
     }
 
-    return std::nullopt;
+    return false;
+}
+
+std::optional<uint32_t> ElfBinary::getSymbolAddress(const char* symbolName) const {
+    std::optional<uint32_t> found;
+
+    forEachSymbol(elf, [&](const GElf_Sym& symbol, const char* name) {
+        if (name && std::string(name) == symbolName) {
+            found = symbol.st_value;
+            return false;
+        }
+        return true;
+    });
+
+    return found;
+}
+
+std::vector<ElfBinary::FunctionSymbol> ElfBinary::getFunctionSymbols() const {
+    std::vector<FunctionSymbol> symbols;
+
+    forEachSymbol(elf, [&](const GElf_Sym& symbol, const char* name) {
+        if (GELF_ST_TYPE(symbol.st_info) != STT_FUNC || symbol.st_shndx == SHN_UNDEF || symbol.st_shndx >= SHN_LORESERVE) {
+            return true;
+        }
+
+        const auto address = static_cast<uint32_t>(symbol.st_value);
+        if (address < textStartAddress || address >= textEndAddress) {
+            return true;
+        }
+
+        const int binding = GELF_ST_BIND(symbol.st_info);
+
+        symbols.push_back(FunctionSymbol{
+            address,
+            static_cast<uint32_t>(symbol.st_size),
+            binding == STB_GLOBAL || binding == STB_WEAK,
+            name ? std::string(name) : std::string(),
+        });
+
+        return true;
+    });
+
+    return symbols;
 }
 
 void ElfBinary::decode() {

@@ -1,0 +1,7 @@
+
+__attribute__((noinline))
+__attribute__((section(".translated_text")))
+static uint32_t %%NAME%%() {
+	[[maybe_unused]] uint32_t address;
+	[[maybe_unused]] uint32_t target;
+	[[maybe_unused]] uint32_t dispatchIndex;
