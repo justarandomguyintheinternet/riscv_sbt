@@ -6,10 +6,10 @@
 namespace Options {
     struct TranslationOptions {
         bool profileIndirect = false; // Collect data on overhead of indirect branch handling, for now not compatible with translation chaining
-        bool translationChaining = true;
+        bool translationChaining = false;
         bool useProfilingData = false; // Use profiling data to supplement jump target identification
         bool softwareBranchPrediction = false; // Requires presence of profiling data
-        bool pinRegisters = false; // Pin most frequently used guest registers to host ones
+        bool pinRegisters = true; // Pin most frequently used guest registers to host ones
     };
 
     // TODO: maybe use some actual argparse type lib

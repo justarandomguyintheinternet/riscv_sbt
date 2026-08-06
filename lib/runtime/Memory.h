@@ -17,17 +17,15 @@ struct Auxiliary {
 
 class Memory {
 public:
-    explicit Memory() : data{}, initialSP(DATA_SIZE - 1), heapEnd(DATA_SIZE / 2) {
-        data = static_cast<uint8_t *>(aligned_alloc(4096, DATA_SIZE + MMAP_SIZE));
-    };
+    explicit Memory() : initialSP(DATA_SIZE - 1), heapEnd(DATA_SIZE / 2), heapBase(DATA_SIZE / 2), pageSize(4096) {};
 
     inline uint8_t read(uint32_t address) { return data[address]; };
     uint8_t& operator[](uint32_t n) {
         return data[n];
     }
 
-    template<typename T>
-    inline void write(uint32_t address, uint32_t value) {
+    template<typename T, typename V>
+    inline void write(uint32_t address, V value) {
         T tmp = static_cast<T>(value);
         std::memcpy(&data[address], &tmp, sizeof(T));
     };
@@ -64,7 +62,8 @@ public:
         uint32_t size;
     };
 private:
-    uint8_t* data;
+    alignas(4096) static inline uint8_t data[DATA_SIZE + MMAP_SIZE];
+
     uint32_t initialSP;
     uint32_t heapEnd;
     uint32_t heapBase;
