@@ -1,3 +1,4 @@
 
-	return runTranslated();
+	runTranslated();
+	return ctx.reg[a0];
 }

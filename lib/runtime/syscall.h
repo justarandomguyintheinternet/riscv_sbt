@@ -23,16 +23,16 @@ namespace Syscall {
     // Specific handlers, inline small ones (?)
     inline void _exit(Context& ctx) {
         for (auto& callback : exitCallbacks) { callback(); }
-        exit(static_cast<uint8_t>(ctx.reg[a0]));
+        exit(static_cast<int32_t>(ctx.reg[a0]));
     };
 
     inline void _write(Context& ctx) {
-        ctx.reg[a0] = write(static_cast<uint8_t>(ctx.reg[a0]), ctx.memory.getHostAddress(ctx.reg[a1]), ctx.reg[a2]);
+        ctx.reg[a0] = write(static_cast<int32_t>(ctx.reg[a0]), ctx.memory.getHostAddress(ctx.reg[a1]), ctx.reg[a2]);
         handleError(ctx);
     }
 
     inline void _read(Context& ctx) {
-        ctx.reg[a0] = read(static_cast<uint8_t>(ctx.reg[a0]), ctx.memory.getHostAddress(ctx.reg[a1]), ctx.reg[a2]);
+        ctx.reg[a0] = read(static_cast<int32_t>(ctx.reg[a0]), ctx.memory.getHostAddress(ctx.reg[a1]), ctx.reg[a2]);
         handleError(ctx);
     }
 
@@ -118,13 +118,13 @@ namespace Syscall {
 
     // https://man7.org/linux/man-pages/man2/openat2.2.html
     inline void _openat(Context& ctx) {
-        ctx.reg[a0] = openat(ctx.reg[a0], static_cast<const char *>(ctx.memory.getHostAddress(ctx.reg[a1])), ctx.reg[a2]);
+        ctx.reg[a0] = openat(static_cast<int32_t>(ctx.reg[a0]), static_cast<const char *>(ctx.memory.getHostAddress(ctx.reg[a1])), ctx.reg[a2]);
         handleError(ctx);
     }
 
     // https://man7.org/linux/man-pages/man2/close.2.html
     inline void _close(Context& ctx) {
-        ctx.reg[a0] = close(ctx.reg[a0]);
+        ctx.reg[a0] = close(static_cast<int32_t>(ctx.reg[a0]));
         handleError(ctx);
     }
 
@@ -132,9 +132,9 @@ namespace Syscall {
     inline void _statx(Context& ctx) {
         // this should be fine even for unaligned pointer addresses, assuming target arch allows unaligned mem access (like x86)
         ctx.reg[a0] = statx(
-            ctx.reg[a0],
+            static_cast<int32_t>(ctx.reg[a0]),
             static_cast<const char*>(ctx.memory.getHostAddress(ctx.reg[a1])), // path
-            ctx.reg[a2],
+            static_cast<int32_t>(ctx.reg[a2]),
             ctx.reg[a3],
             static_cast<struct statx*>(ctx.memory.getHostAddress(ctx.reg[a4])) // statx struct pointer to be written to
         );

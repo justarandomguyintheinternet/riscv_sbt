@@ -16,7 +16,7 @@
 #define SWITCH 1
 
 Memory memory;
-ProfilingInfo info("./profiling.json", true);
+ProfilingInfo info("./profiling.json", false);
 
 void printInfo(Context& ctx) {
     bool hasRegOutput = false;

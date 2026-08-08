@@ -64,7 +64,7 @@ void RuntimeEmitter::emitInterpreterFallback() {
     emitter.setIndent(3);
     emitter.emitRegisterStore(); // printInfo reads ctx.reg[]
     emitter.emit("printInfo(ctx);\n");
-    emitter.emit("return 0;\n");
+    emitter.emit("return;\n");
 
     emitter.setIndent(2);
     emitter.emit("}\n");

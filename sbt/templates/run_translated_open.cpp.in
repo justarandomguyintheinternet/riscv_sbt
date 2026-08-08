@@ -1,5 +1,5 @@
 
 __attribute__((noinline))
 __attribute__((section(".translated_text")))
-int runTranslated() {
+void runTranslated() {
 	static void* dispatch[%%TEXT_SIZE%%] = {
