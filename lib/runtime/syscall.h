@@ -2,6 +2,7 @@
 #define RISCV_TOOLS_SYSCALL_H
 
 #include <cassert>
+#include <cerrno>
 #include <runtime/Context.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -40,14 +41,23 @@ namespace Syscall {
         uint32_t iov = ctx.reg[a1]; // base address of io vector, each entry consists of pointer to start of string to output, and length (2x uint32_t)
         uint32_t iovcnt = ctx.reg[a2]; // number of entries in io vector
 
-        ctx.reg[a0] = 0;
+        int32_t total = 0;
         for (uint32_t i = 0; i < iovcnt; i++) {
             uint32_t base = ctx.memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t));
             uint32_t len  = ctx.memory.read<uint32_t>(iov + i * 2 * sizeof(uint32_t) + sizeof(uint32_t));
-            ctx.reg[a0] += write(fd, ctx.memory.getHostAddress(base), len);
 
-            handleError(ctx);
+            ssize_t written = write(fd, ctx.memory.getHostAddress(base), len);
+
+            if (written < 0) {
+                ctx.reg[a0] = total == 0 ? -errno : total;
+                return;
+            }
+
+            total += static_cast<int32_t>(written);
+            if (static_cast<uint32_t>(written) < len) { break; }
         }
+
+        ctx.reg[a0] = total;
     }
 
     inline void _brk(Context& ctx) {
@@ -64,7 +74,7 @@ namespace Syscall {
     }
 
     inline void _mmap(Context& ctx) {
-        bool placeFreely = ctx.reg[a0] == 0; // If specific address is given, no need to keep track of it
+        bool placeFreely = ctx.reg[a0] == 0; // Only needs to use mmap arena inside memory when its placed freely
 
         if (placeFreely) {
             ctx.reg[a0] = ctx.memory.getMmapAddress(ctx.reg[a1]);

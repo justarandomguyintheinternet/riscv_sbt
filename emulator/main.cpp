@@ -1,19 +1,19 @@
 #include <cstring>
 #include <iostream>
 #include <iomanip>
-#include <unordered_map>
 
 #include "elf/ElfBinary.h"
 #include "runtime/Memory.h"
 #include "Interpreter.h"
 #include "ProfilingInfo.h"
+#include "runtime/registers.h"
 
 #define BASE_RA 0xdeadbeef
 
 #define PREDECODE 1
 #define THREADING 1
 // #define DIRECT_THREADING 1 Located in Interpreter.cpp
-#define SWITCH 0
+#define SWITCH 1
 
 Memory memory;
 ProfilingInfo info("./profiling.json", true);
@@ -62,8 +62,8 @@ int main(int argc, char** argv, char** envp) {
 
     if (!binary.getSymbolAddress("_start").has_value()) {
         std::cout << "No _start symbol found, using default init" << std::endl;
-        ctx.reg[1] = BASE_RA; // init ra to known address, as no exit syscall will exist
-        ctx.reg[3] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
+        ctx.reg[ra] = BASE_RA; // init ra to known address, as no exit syscall will exist
+        ctx.reg[gp] = binary.getSymbolAddress("__global_pointer$").value_or(0); // Should usually be data.getStartAddress() + 0x800; https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
     }
 
     Interpreter::activeProfilingInfo = &info;
