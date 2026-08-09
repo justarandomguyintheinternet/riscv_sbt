@@ -1,6 +1,7 @@
 #ifndef RISCV_EMU_INSTRUCTIONS_H
 #define RISCV_EMU_INSTRUCTIONS_H
 
+#include <array>
 #include <cstdint>
 
 enum class EInstruction {
@@ -157,5 +158,59 @@ inline constexpr InstructionSpec RV32A[] = {
     { EInstruction::LR_W,     EInstructionFMT::R, 0b0101111, true,  0x2, false,  0x0, 0xF8000000, 0x10000000 },
     { EInstruction::SC_W,    EInstructionFMT::R, 0b0101111, true,  0x2, false,  0x0, 0xF8000000, 0x18000000 }
 };
+
+template<typename Fn>
+constexpr void forEachInstructionSpec(Fn&& fn) {
+    for (const auto& spec : RV32I) fn(spec);
+    for (const auto& spec : RV32M) fn(spec);
+    for (const auto& spec : RV32A) fn(spec);
+}
+
+enum ERegisterUse : uint8_t {
+    USE_NONE = 0,
+    USE_RS1 = 1 << 0,
+    USE_RS2 = 1 << 1,
+    USE_RD = 1 << 2
+};
+
+constexpr uint8_t formatRegisterUse(EInstructionFMT format) {
+    switch (format) {
+        case EInstructionFMT::R: return USE_RS1 | USE_RS2 | USE_RD;
+        case EInstructionFMT::I: return USE_RS1 | USE_RD;
+        case EInstructionFMT::S:
+        case EInstructionFMT::B: return USE_RS1 | USE_RS2;
+        case EInstructionFMT::J:
+        case EInstructionFMT::U: return USE_RD;
+    }
+    return USE_NONE;
+}
+
+inline constexpr auto RegisterUseByType = [] {
+    std::array<uint8_t, static_cast<std::size_t>(EInstruction::TYPE_COUNT)> table{};
+    forEachInstructionSpec([&](const InstructionSpec& spec) {
+        table[static_cast<std::size_t>(spec.type)] = formatRegisterUse(spec.format);
+    });
+    // ecall/ebreak use no regs at all
+    table[static_cast<std::size_t>(EInstruction::ECALL)] = USE_NONE;
+    table[static_cast<std::size_t>(EInstruction::EBREAK)] = USE_NONE;
+    return table;
+}();
+
+inline constexpr auto RegisterUseByOpcode = [] {
+    std::array<uint8_t, 128> table{};
+    forEachInstructionSpec([&](const InstructionSpec& spec) {
+        table[spec.opcode] = formatRegisterUse(spec.format);
+    });
+    table[0b1110011] = USE_NONE; // ecall/ebreak
+    return table;
+}();
+
+constexpr uint8_t registerUse(EInstruction type) {
+    return RegisterUseByType[static_cast<std::size_t>(type)];
+}
+
+constexpr uint8_t opcodeRegisterUse(uint8_t opcode) {
+    return RegisterUseByOpcode[opcode & 0x7f];
+}
 
 #endif //RISCV_EMU_INSTRUCTIONS_H

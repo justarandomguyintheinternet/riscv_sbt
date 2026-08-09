@@ -66,14 +66,14 @@ void ProfilingInfo::recordIndirectBranch(uint32_t branchAddress, uint32_t destin
     indirectBranchTargets[branchAddress][destinationAddress]++;
 }
 
-void ProfilingInfo::recordRegisterAccess(uint32_t rs1, uint32_t rs2, uint32_t rd) {
-    if (rs1 < RegisterCount) {
+void ProfilingInfo::recordRegisterAccess(uint8_t registerUse, uint32_t rs1, uint32_t rs2, uint32_t rd) {
+    if ((registerUse & USE_RS1) && rs1 < RegisterCount) {
         registerAccessCounts[rs1]++;
     }
-    if (rs2 < RegisterCount) {
+    if ((registerUse & USE_RS2) && rs2 < RegisterCount) {
         registerAccessCounts[rs2]++;
     }
-    if (rd < RegisterCount) {
+    if ((registerUse & USE_RD) && rd < RegisterCount) {
         registerAccessCounts[rd]++;
     }
 }

@@ -24,7 +24,7 @@ public:
 
     void incrementInstructionCount(EInstruction instruction);
     void recordIndirectBranch(uint32_t branchAddress, uint32_t destinationAddress);
-    void recordRegisterAccess(uint32_t rs1, uint32_t rs2, uint32_t rd);
+    void recordRegisterAccess(uint8_t registerUse, uint32_t rs1, uint32_t rs2, uint32_t rd);
 
     void load();
     void save();

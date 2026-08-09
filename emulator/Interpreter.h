@@ -21,7 +21,7 @@ namespace Interpreter {
     void runInstructionsThreaded(Context& ctx, std::vector<Instruction>& instructions, uint32_t textStartAddress);
     void logInstruction(Context& ctx, EInstruction type);
     void logJump(Context& ctx, uint32_t target);
-    void logRegister(uint32_t rs1, uint32_t rs2, uint32_t rd);
+    void logRegister(uint8_t registerUse, uint32_t rs1, uint32_t rs2, uint32_t rd);
 }
 
 #define LOG_INST(ctx, type) \
@@ -38,10 +38,11 @@ namespace Interpreter {
         } \
     } while (false)
 
-#define LOG_REG(rs1, rs2, rd) \
+// registerUse is bitfield encoding what regs are actually being used
+#define LOG_REG(use, rs1, rs2, rd) \
     do { \
         if constexpr (Interpreter::profileInstructions) { \
-            Interpreter::logRegister(rs1, rs2, rd); \
+            Interpreter::logRegister(use, rs1, rs2, rd); \
         } \
     } while (false)
 
