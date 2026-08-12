@@ -11,7 +11,7 @@ case "$TARGET" in
         CC_COMPILER="riscv32-linux-musl-gcc"
         ;;
     x86)
-        CC_COMPILER="gcc"
+        CC_COMPILER="x86_64-linux-musl-gcc"
         ;;
     *)
         echo "Unknown target: $TARGET"
