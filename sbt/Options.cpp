@@ -9,8 +9,8 @@ std::vector<char*> Options::parseArguments(int argc, char** argv, TranslationOpt
     for (int i = 1; i < argc; ++i) {
         std::string_view arg = argv[i];
 
-        if (arg == "--no-translation-chaining") {
-            options.translationChaining = false;
+        if (arg == "--translation-chaining") {
+            options.translationChaining = true;
         } else if (arg == "--profile-indirect") {
             options.profileIndirect = true;
         } else if (arg == "--software-branch-prediction") {
@@ -30,9 +30,9 @@ std::vector<char*> Options::parseArguments(int argc, char** argv, TranslationOpt
 void Options::printHelp(char** argv) {
     std::cerr << "Usage: " << argv[0] << " <elf binary> [output directory] [options]\n"
                << "Options:\n"
-               << "  --no-translation-chaining     Disable translation chaining between indirect jumps (default: enabled)\n"
-               << "  --profile-indirect            Collect overhead data for indirect branch handling, requires --no-translation-chaining (default: disabled)\n"
+               << "  --translation-chaining        Enable translation chaining between indirect jumps (default: disabled)\n"
+               << "  --profile-indirect            Collect overhead data for indirect branch handling, requires --translation-chaining (default: disabled)\n"
                << "  --software-branch-prediction  Hardcode most frequent indirect branch targets using profiling data (default: disabled)\n"
                << "  --use-profiling-data          Use profiling data to supplement jump target identification (default: disabled)\n"
-               << "  --pin-registers               Pins most frequently used guest registers to host ones (default: disabled)\n";
+               << "  --pin-registers               Pins most frequently used guest registers to host ones (default: enabled)\n";
 }
